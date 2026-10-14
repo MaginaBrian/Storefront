@@ -164,6 +164,20 @@ CREATE TABLE IF NOT EXISTS rollouts (
   note TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS catalog_items (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  detail TEXT NOT NULL,
+  price INTEGER NOT NULL,
+  dest TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS reports (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  last_viewed TEXT,
+  created_by TEXT NOT NULL DEFAULT 'Shopify'
+);
 CREATE TABLE IF NOT EXISTS companies (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -547,6 +561,99 @@ def ensure_customer_section(db):
         )
 
 
+REPORTS = [
+    ("Net payments by method", "Finances", "2026-10-14"),
+    ("Items ordered over time", "Orders", "2026-10-14"),
+    ("Gross sales over time", "Sales", "2026-10-02"),
+    ("Sessions by location", "Acquisition", None),
+    ("Sessions by referrer", "Acquisition", None),
+    ("Sessions by social referrer", "Acquisition", None),
+    ("Sessions over time", "Acquisition", None),
+    ("Visitors over time", "Acquisition", None),
+    ("Visitors right now", "Acquisition", None),
+    ("Bounce rate over time", "Behavior", None),
+    ("Checkout conversion rate over time", "Behavior", None),
+    ("Conversion rate breakdown", "Behavior", None),
+    ("Conversion rate over time", "Behavior", None),
+    ("Customer behavior", "Behavior", None),
+    ("Product recommendation conversions over time", "Behavior", None),
+    ("Product recommendations with low engagement", "Behavior", None),
+    ("Search conversions over time", "Behavior", None),
+    ("Searches by search query", "Behavior", None),
+    ("Searches with no clicks", "Behavior", None),
+    ("Searches with no results", "Behavior", None),
+    ("Sessions by device type", "Behavior", None),
+    ("Sessions by landing page", "Behavior", None),
+    ("Shop Campaign ROAS", "Behavior", None),
+    ("Storefront agent assisted sessions", "Behavior", None),
+    ("Storefront agent conversations and feedback", "Behavior", None),
+    ("Customer cohort analysis", "Customers", None),
+    ("Customers by location", "Customers", None),
+    ("New customer sales over time", "Customers", None),
+    ("New customers over time", "Customers", None),
+    ("New vs returning customers", "Customers", None),
+    ("One-time customers", "Customers", None),
+    ("Predicted spend tiers", "Customers", None),
+    ("Returning customer rate over time", "Customers", None),
+    ("Returning customers", "Customers", None),
+    ("RFM customer analysis", "Customers", None),
+    ("RFM customer list", "Customers", None),
+    ("Chargeback rate", "Finances", None),
+    ("Cost of goods sold by order", "Finances", None),
+    ("Discounts by order", "Finances", None),
+    ("Finance summary", "Finances", None),
+    ("Gross payments from Shopify Payments", "Finances", None),
+    ("Gross profit breakdown", "Finances", None),
+    ("Gross profit by order", "Finances", None),
+    ("Gross sales by order", "Finances", None),
+    ("Managed Markets taxes", "Finances", None),
+    ("Net payments by gateway", "Finances", None),
+    ("Net payments by order", "Finances", None),
+    ("Net payments over time", "Finances", None),
+    ("Net sales by order", "Finances", None),
+]
+
+
+CATALOG_ITEMS = [
+    ("A1544-3 (B1820) Rib fabric", "3 variants", 148700, "inventory"),
+    ("A1605 - (A1885) Rib fabric", "3 variants", 146800, "inventory"),
+    ("A1885 - Fabric", "3 variants", 118000, "inventory"),
+    ("B1820 - Fabric", "4 variants", 2813600, "inventory"),
+    ("Drawstrings", "4 variants", 9800, ""),
+    ('Elastic waistbands 0.5"', "2 variants", 240000, ""),
+    ('Elastic waistbands 1"', "2 variants", 290000, ""),
+    ('Elastic waistbands 1.25"', "2 variants", 400000, ""),
+    ('Elastic waistbands 1.5"', "2 variants", 440000, ""),
+    ('Elastic waistbands 2"', "2 variants", 570000, ""),
+    ("Groove bucket hat", "Green", 39000, ""),
+    ("Groove denim cap", "Black", 42900, ""),
+    ("Groove visor hat", "Gray", 41340, ""),
+    ("Mwotaji - Crop Turn-up Tee", "2 variants", 30000, "products"),
+    ("Mwotaji - Hoodie", "2 variants", 50000, "products"),
+    ("Mwotaji - Oversized Tee", "2 variants", 30000, "products"),
+    ("Mwotaji - Sweatpant", "2 variants", 60000, "products"),
+    ("Mwotaji - Sweatshirt", "2 variants", 50000, "products"),
+    ("Mwotaji - Vest", "2 variants", 30000, "products"),
+    ("Polyester thread 40S/2", "4 variants", 12000, ""),
+    ("Sample woven wristbands", "Multicolor", 7080, ""),
+    ("Woven wristbands", "", 3500, ""),
+]
+
+GENERAL_SETTINGS = [
+    ("entity_name", "My Store", "Business name", 10),
+    ("entity_country", "Kenya", "Business country", 11),
+    ("contact_email", "cosinecreate@gmail.com", "Contact email", 12),
+    ("phone", "", "Phone", 13),
+    ("address", "Nairobi, Nairobi, 00100, Kenya", "Store address", 14),
+    ("currency_label", "Kenyan Shilling (KES)", "Currency display", 15),
+    ("backup_region", "Kenya", "Backup region", 16),
+    ("order_prefix", "#", "Order ID prefix", 17),
+    ("order_suffix", "", "Order ID suffix", 18),
+    ("fulfill_mode", "none", "Order fulfillment", 19),
+    ("auto_archive", "1", "Archive fulfilled orders", 20),
+]
+
+
 def ensure_content_markets(db):
     if not db.execute("SELECT COUNT(*) FROM meta_entries").fetchone()[0]:
         db.executemany(
@@ -555,6 +662,32 @@ def ensure_content_markets(db):
         )
     if not db.execute("SELECT COUNT(*) FROM menus").fetchone()[0]:
         db.executemany("INSERT INTO menus (id, name, items) VALUES (?, ?, ?)", MENUS)
+    if not db.execute("SELECT COUNT(*) FROM reports").fetchone()[0]:
+        db.executemany(
+            "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Shopify')",
+            REPORTS,
+        )
+    if not db.execute("SELECT COUNT(*) FROM catalog_items").fetchone()[0]:
+        db.executemany(
+            "INSERT INTO catalog_items (name, detail, price, dest) VALUES (?, ?, ?, ?)",
+            CATALOG_ITEMS,
+        )
+    else:
+        db.execute(
+            "UPDATE catalog_items SET detail = '2 variants', price = 60000 WHERE name = 'Mwotaji - Sweatpant' AND price = 50000"
+        )
+        for name, detail, price, dest in CATALOG_ITEMS:
+            if not db.execute("SELECT 1 FROM catalog_items WHERE name = ?", (name,)).fetchone():
+                db.execute(
+                    "INSERT INTO catalog_items (name, detail, price, dest) VALUES (?, ?, ?, ?)",
+                    (name, detail, price, dest),
+                )
+    for key, value, label, sort in GENERAL_SETTINGS:
+        if not db.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone():
+            db.execute(
+                "INSERT INTO settings (key, value, label, sort) VALUES (?, ?, ?, ?)",
+                (key, value, label, sort),
+            )
 
 
 def init_db():

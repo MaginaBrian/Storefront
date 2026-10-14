@@ -1,4 +1,6 @@
 export { Analytics } from './Analytics.jsx'
+export { LiveView } from './LiveView.jsx'
+export { Reports } from './Reports.jsx'
 export { AgenticPage, StorePage } from './Channels.jsx'
 export { BlogPosts } from './BlogPosts.jsx'
 export { Catalogs } from './Catalogs.jsx'

@@ -23,7 +23,8 @@ export const PRODUCT_VIEWS = ['collections', 'inventory', 'purchase-orders', 'tr
 export const CUSTOMER_VIEWS = ['segments', 'companies']
 export const CONTENT_VIEWS = ['metaobjects', 'files', 'menus', 'blog-posts']
 export const MARKET_VIEWS = ['catalogs', 'rollouts']
-export const VIEWS = new Set([...NAV, ...CHANNELS, SETTINGS].map(n => n.id).concat(['drafts', 'checkouts', ...PRODUCT_VIEWS, ...CUSTOMER_VIEWS, ...CONTENT_VIEWS, ...MARKET_VIEWS]))
+export const ANALYTICS_VIEWS = ['reports', 'live-view']
+export const VIEWS = new Set([...NAV, ...CHANNELS, SETTINGS].map(n => n.id).concat(['drafts', 'checkouts', ...PRODUCT_VIEWS, ...CUSTOMER_VIEWS, ...CONTENT_VIEWS, ...MARKET_VIEWS, ...ANALYTICS_VIEWS]))
 
 export function readRoute() {
   const [path, qs = ''] = location.hash.replace(/^#\/?/, '').split('?')

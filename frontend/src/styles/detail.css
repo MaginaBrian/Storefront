@@ -85,6 +85,36 @@ tr.picked td { background: #eef0ff; }
 .search-results button:hover { background: #f3f3f8; }
 .backdrop { position: fixed; inset: 0; z-index: 20; background: rgba(20, 16, 40, .45); display: grid; place-items: center; padding: 16px; }
 .pop { width: min(440px, 100%); }
+.settings-layout { display: grid; grid-template-columns: 232px minmax(0, 760px); gap: 28px; align-items: start; }
+.settings-rail { display: grid; gap: 2px; position: sticky; top: 0; }
+.settings-store { display: flex; align-items: center; gap: 10px; padding: 8px; margin-bottom: 8px; }
+.settings-store b { width: 32px; height: 32px; border-radius: 8px; background: #e5f6ea; color: #178a4a; display: grid; place-items: center; font-size: 11px; flex: none; }
+.settings-store small { display: block; color: var(--muted); font-weight: 400; }
+.settings-search { margin: 0 0 8px; }
+.settings-rail > button { text-align: left; padding: 7px 10px; border-radius: 8px; color: #44485f; }
+.settings-rail > button.on, .settings-rail > button:hover { background: #ececf3; }
+.settings-rail > button.on { font-weight: 600; }
+.settings-page h1 { font: 600 28px var(--sans); margin-bottom: 18px; }
+.settings-block { margin-bottom: 22px; }
+.settings-block h2 { font-size: 14px; margin-bottom: 4px; }
+.settings-block .lead, .settings-note { color: var(--muted); }
+.settings-note { background: #f4f4f7; border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; }
+.settings-rows { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; margin-top: 8px; }
+.settings-rows + .settings-rows { margin-top: 12px; }
+.settings-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; background: #fff; border: 0; border-bottom: 1px solid var(--line); }
+.settings-rows .settings-row:last-child { border-bottom: 0; }
+.settings-row:hover { background: #fafafd; }
+.settings-row strong, .settings-inline strong { display: block; font-weight: 600; }
+.settings-row small, .settings-entity small, .settings-inline small, .choice small { display: block; color: var(--muted); font-weight: 400; }
+.settings-entity, .settings-inline, .transfer-card { display: flex; align-items: center; gap: 12px; }
+.settings-entity .flag { font-size: 18px; }
+.grow { flex: 1; min-width: 0; }
+.defaults-card { display: grid; gap: 14px; }
+.order-id-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.choice { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }
+.archive-lead { margin-top: 14px; }
+.settings-editor .orders-actions { justify-content: flex-end; margin-top: 12px; }
+.settings-section .orders-actions { margin-top: 14px; }
 .settings { display: grid; gap: 12px; max-width: 480px; }
 .settings label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
 .settings input { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; color: var(--text); }

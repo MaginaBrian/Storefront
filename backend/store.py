@@ -210,6 +210,11 @@ def create_blog_post():
     return jsonify(query("SELECT * FROM blog_posts WHERE id = ?", (post_id,))[0]), 201
 
 
+@bp.get("/api/catalog-items")
+def catalog_items():
+    return jsonify(query("SELECT * FROM catalog_items ORDER BY id"))
+
+
 @bp.get("/api/market-catalogs")
 def market_catalogs():
     return jsonify(query("SELECT * FROM market_catalogs ORDER BY id DESC"))
@@ -280,6 +285,19 @@ def create_market():
     return jsonify(query("SELECT * FROM markets WHERE id = ?", (market_id,))[0]), 201
 
 
+@bp.patch("/api/markets/<int:market_id>")
+def update_market(market_id):
+    body = request.json or {}
+    found = query("SELECT * FROM markets WHERE id = ?", (market_id,))
+    if not found:
+        return jsonify(error="Market not found"), 404
+    name = str(body.get("name") or found[0]["name"]).strip() or found[0]["name"]
+    status = body.get("status") if body.get("status") in ("active", "draft") else found[0]["status"]
+    with connect() as db:
+        db.execute("UPDATE markets SET name = ?, status = ? WHERE id = ?", (name[:80], status, market_id))
+    return jsonify(query("SELECT * FROM markets WHERE id = ?", (market_id,))[0])
+
+
 @bp.get("/api/growth")
 def growth():
     return jsonify(query("SELECT * FROM campaigns ORDER BY id"))
@@ -343,6 +361,27 @@ def dashboard():
     )
 
 
+@bp.get("/api/reports")
+def reports():
+    return jsonify(query("SELECT * FROM reports ORDER BY id"))
+
+
+@bp.post("/api/reports")
+def create_report():
+    body = request.json or {}
+    name = str(body.get("name") or "").strip()
+    if not name:
+        return jsonify(error="Enter a report name."), 400
+    category = str(body.get("category") or "Sales").strip() or "Sales"
+    with connect() as db:
+        cur = db.execute(
+            "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Maison')",
+            (name[:140], category[:40], date.today().isoformat()),
+        )
+        report_id = cur.lastrowid
+    return jsonify(query("SELECT * FROM reports WHERE id = ?", (report_id,))[0]), 201
+
+
 @bp.get("/api/analytics")
 def analytics():
     return jsonify(
@@ -380,5 +419,7 @@ def search():
         hits.append({"view": "metaobjects", "label": row["name"], "entry": row["name"]})
     for row in query("SELECT name FROM markets WHERE name LIKE ? LIMIT 5", (like,)):
         hits.append({"view": "markets", "label": row["name"], "market": row["name"]})
+    for row in query("SELECT id, name FROM reports WHERE name LIKE ? LIMIT 5", (like,)):
+        hits.append({"view": "reports", "label": row["name"], "report": row["id"]})
     return jsonify(hits)
 
