@@ -103,7 +103,7 @@ tr.picked td { background: #eef0ff; }
 .status-pill.archived { background: #f1f2f4; color: #5c5c5c; }
 .product-head .ghost, .editor-bar button, .file-btn { display: inline-flex; align-items: center; gap: 6px; }
 .field { display: grid; gap: 6px; margin-top: 12px; font-weight: 600; }
-.field input, .field select, .order-side select, .category-input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 400; color: var(--text); background: #fff; }
+.field input, .field select, .field textarea, .order-side select, .category-input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 400; color: var(--text); background: #fff; }
 .editor { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .editor-bar { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px; border-bottom: 1px solid var(--line); background: #fafafd; }
 .editor-bar button { padding: 4px 6px; border-radius: 6px; color: #44485f; }

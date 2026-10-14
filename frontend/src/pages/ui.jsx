@@ -23,3 +23,26 @@ export function Sheet({ title, action, columns, rows, empty, picked }) {
 }
 
 export const Status = ({ value }) => <span className={`pill ${value}`}>{value}</span>
+
+export function EmptyPane({ title, actions, heading, text, action, onAction, extra, learn, href, mark }) {
+  return (
+    <>
+      <div className="orders-top">
+        <h1>{title}</h1>
+        <div className="orders-actions">{actions}</div>
+      </div>
+      <section className="panel empty-hero">
+        {mark}
+        <div>
+          <h2>{heading}</h2>
+          <p>{text}</p>
+          <div className="orders-actions">
+            {extra}
+            {action && <button type="button" className="solid" onClick={onAction}>{action}</button>}
+          </div>
+        </div>
+      </section>
+      {learn && <a className="learn" href={href} target="_blank" rel="noreferrer">{learn}</a>}
+    </>
+  )
+}

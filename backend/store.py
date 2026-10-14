@@ -102,6 +102,155 @@ def discounts():
     return jsonify(query("SELECT * FROM discounts ORDER BY id"))
 
 
+@bp.post("/api/discounts")
+def create_discount():
+    body = request.json or {}
+    code = str(body.get("code") or "").strip().upper()
+    kind = str(body.get("kind") or "Percentage").strip()
+    value = str(body.get("value") or "").strip()
+    if not code or not value:
+        return jsonify(error="Enter a code and a value."), 400
+    if kind not in ("Percentage", "Fixed amount", "Free shipping"):
+        kind = "Percentage"
+    with connect() as db:
+        cur = db.execute(
+            "INSERT INTO discounts (code, kind, value, status, uses) VALUES (?, ?, ?, 'active', 0)",
+            (code[:40], kind, value[:40]),
+        )
+        discount_id = cur.lastrowid
+    return jsonify(query("SELECT * FROM discounts WHERE id = ?", (discount_id,))[0]), 201
+
+
+@bp.get("/api/files")
+def files():
+    return jsonify(query("SELECT * FROM files ORDER BY id DESC"))
+
+
+@bp.post("/api/files")
+def create_file():
+    body = request.json or {}
+    name = str(body.get("name") or "").strip()
+    if not name:
+        return jsonify(error="Enter a file name or URL."), 400
+    kind = str(body.get("kind") or "File").strip() or "File"
+    with connect() as db:
+        cur = db.execute(
+            "INSERT INTO files (name, kind, source, created_at) VALUES (?, ?, ?, ?)",
+            (name[:180], kind[:40], str(body.get("source") or "").strip()[:300], date.today().isoformat()),
+        )
+        file_id = cur.lastrowid
+    return jsonify(query("SELECT * FROM files WHERE id = ?", (file_id,))[0]), 201
+
+
+@bp.get("/api/metaobjects")
+def metaobjects():
+    entries = query("SELECT * FROM meta_entries ORDER BY id")
+    definitions = query("SELECT * FROM meta_definitions ORDER BY id")
+    active = sum(1 for row in entries if row["status"] == "active")
+    return jsonify(
+        entries=entries,
+        definitions=definitions,
+        available=active,
+        active=active,
+        draft=sum(1 for row in entries if row["status"] == "draft"),
+        web_pages=0,
+    )
+
+
+@bp.post("/api/metaobjects/definitions")
+def create_definition():
+    body = request.json or {}
+    name = str(body.get("name") or "").strip()
+    if not name:
+        return jsonify(error="Enter a definition name."), 400
+    with connect() as db:
+        cur = db.execute(
+            "INSERT INTO meta_definitions (name, type) VALUES (?, ?)",
+            (name[:80], str(body.get("type") or "Custom").strip()[:40] or "Custom"),
+        )
+        definition_id = cur.lastrowid
+    return jsonify(query("SELECT * FROM meta_definitions WHERE id = ?", (definition_id,))[0]), 201
+
+
+@bp.get("/api/menus")
+def menus():
+    return jsonify(query("SELECT * FROM menus ORDER BY id"))
+
+
+@bp.post("/api/menus")
+def create_menu():
+    body = request.json or {}
+    name = str(body.get("name") or "").strip()
+    items = str(body.get("items") or "").strip()
+    if not name:
+        return jsonify(error="Enter a menu name."), 400
+    with connect() as db:
+        cur = db.execute("INSERT INTO menus (name, items) VALUES (?, ?)", (name[:80], items[:200]))
+        menu_id = cur.lastrowid
+    return jsonify(query("SELECT * FROM menus WHERE id = ?", (menu_id,))[0]), 201
+
+
+@bp.get("/api/blog-posts")
+def blog_posts():
+    return jsonify(query("SELECT * FROM blog_posts ORDER BY id DESC"))
+
+
+@bp.post("/api/blog-posts")
+def create_blog_post():
+    body = request.json or {}
+    title = str(body.get("title") or "").strip()
+    if not title:
+        return jsonify(error="Enter a title."), 400
+    with connect() as db:
+        cur = db.execute(
+            "INSERT INTO blog_posts (title, body, blog, created_at) VALUES (?, ?, ?, ?)",
+            (title[:140], str(body.get("body") or "").strip()[:4000], "News", date.today().isoformat()),
+        )
+        post_id = cur.lastrowid
+    return jsonify(query("SELECT * FROM blog_posts WHERE id = ?", (post_id,))[0]), 201
+
+
+@bp.get("/api/market-catalogs")
+def market_catalogs():
+    return jsonify(query("SELECT * FROM market_catalogs ORDER BY id DESC"))
+
+
+@bp.post("/api/market-catalogs")
+def create_market_catalog():
+    body = request.json or {}
+    title = str(body.get("title") or "").strip()
+    if not title:
+        return jsonify(error="Enter a catalog title."), 400
+    market = str(body.get("market") or "Kenya").strip() or "Kenya"
+    with connect() as db:
+        cur = db.execute(
+            "INSERT INTO market_catalogs (title, market, created_at) VALUES (?, ?, ?)",
+            (title[:120], market[:40], date.today().isoformat()),
+        )
+        catalog_id = cur.lastrowid
+    return jsonify(query("SELECT * FROM market_catalogs WHERE id = ?", (catalog_id,))[0]), 201
+
+
+@bp.get("/api/rollouts")
+def rollouts():
+    return jsonify(query("SELECT * FROM rollouts ORDER BY id DESC"))
+
+
+@bp.post("/api/rollouts")
+def create_rollout():
+    body = request.json or {}
+    name = str(body.get("name") or "").strip()
+    if not name:
+        return jsonify(error="Enter a rollout name."), 400
+    with connect() as db:
+        cur = db.execute(
+            "INSERT INTO rollouts (name, note, created_at) VALUES (?, ?, ?)",
+            (name[:120], str(body.get("note") or "").strip()[:500], date.today().isoformat()),
+        )
+        rollout_id = cur.lastrowid
+    return jsonify(query("SELECT * FROM rollouts WHERE id = ?", (rollout_id,))[0]), 201
+
+
 @bp.get("/api/content")
 def content():
     return jsonify(query("SELECT * FROM pages ORDER BY id"))
@@ -110,6 +259,25 @@ def content():
 @bp.get("/api/markets")
 def markets():
     return jsonify(query("SELECT * FROM markets ORDER BY id"))
+
+
+@bp.post("/api/markets")
+def create_market():
+    body = request.json or {}
+    name = str(body.get("name") or "").strip()
+    if not name:
+        return jsonify(error="Enter a market name."), 400
+    currency = str(body.get("currency") or "USD").strip().upper()[:8] or "USD"
+    with connect() as db:
+        existing = db.execute("SELECT id FROM markets WHERE name = ?", (name,)).fetchone()
+        if existing:
+            return jsonify(query("SELECT * FROM markets WHERE id = ?", (existing["id"],))[0])
+        cur = db.execute(
+            "INSERT INTO markets (name, currency, status) VALUES (?, ?, 'active')",
+            (name[:80], currency),
+        )
+        market_id = cur.lastrowid
+    return jsonify(query("SELECT * FROM markets WHERE id = ?", (market_id,))[0]), 201
 
 
 @bp.get("/api/growth")
@@ -206,5 +374,11 @@ def search():
         hits.append({"view": "customers", "label": row["name"], "segment": row["id"]})
     for row in query("SELECT id, name FROM companies WHERE name LIKE ? LIMIT 5", (like,)):
         hits.append({"view": "companies", "label": row["name"], "company": row["id"]})
+    for row in query("SELECT id, name FROM menus WHERE name LIKE ? LIMIT 5", (like,)):
+        hits.append({"view": "menus", "label": row["name"], "menu": row["id"]})
+    for row in query("SELECT name FROM meta_entries WHERE name LIKE ? LIMIT 5", (like,)):
+        hits.append({"view": "metaobjects", "label": row["name"], "entry": row["name"]})
+    for row in query("SELECT name FROM markets WHERE name LIKE ? LIMIT 5", (like,)):
+        hits.append({"view": "markets", "label": row["name"], "market": row["name"]})
     return jsonify(hits)
 

@@ -21,7 +21,9 @@ export const SETTINGS = { id: 'settings', label: 'Settings', icon: Settings }
 
 export const PRODUCT_VIEWS = ['collections', 'inventory', 'purchase-orders', 'transfers', 'gift-cards']
 export const CUSTOMER_VIEWS = ['segments', 'companies']
-export const VIEWS = new Set([...NAV, ...CHANNELS, SETTINGS].map(n => n.id).concat(['drafts', 'checkouts', ...PRODUCT_VIEWS, ...CUSTOMER_VIEWS]))
+export const CONTENT_VIEWS = ['metaobjects', 'files', 'menus', 'blog-posts']
+export const MARKET_VIEWS = ['catalogs', 'rollouts']
+export const VIEWS = new Set([...NAV, ...CHANNELS, SETTINGS].map(n => n.id).concat(['drafts', 'checkouts', ...PRODUCT_VIEWS, ...CUSTOMER_VIEWS, ...CONTENT_VIEWS, ...MARKET_VIEWS]))
 
 export function readRoute() {
   const [path, qs = ''] = location.hash.replace(/^#\/?/, '').split('?')

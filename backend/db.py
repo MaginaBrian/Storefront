@@ -121,6 +121,49 @@ CREATE TABLE IF NOT EXISTS segments (
   last_activity TEXT NOT NULL,
   created_by TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS files (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS meta_entries (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  swatch TEXT NOT NULL,
+  status TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS meta_definitions (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS menus (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  items TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS blog_posts (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  blog TEXT NOT NULL DEFAULT 'News',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS market_catalogs (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  market TEXT NOT NULL DEFAULT 'Kenya',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS rollouts (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS companies (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -477,12 +520,41 @@ SEGMENTS = [
 ]
 
 
+COLORS = [
+    (1, "Off White", "Color", "#f3efe6", "active"),
+    (2, "Beige", "Color", "#e4d2b0", "active"),
+    (3, "Multicolor", "Color", "linear-gradient(135deg,#f4efe6,#e4d2b0,#9aa0a6,#5c6370)", "active"),
+    (4, "Gray", "Color", "#8d939c", "active"),
+    (5, "Black", "Color", "#1c1c1c", "active"),
+    (6, "White", "Color", "#ffffff", "active"),
+    (7, "Teal", "Color", "#7ec8c3", "active"),
+    (8, "Light Grey", "Color", "#d5d8de", "active"),
+    (9, "Navy", "Color", "#243056", "active"),
+]
+
+MENUS = [
+    (1, "Main menu", "Home, Catalog, Contact"),
+    (2, "Footer menu", "Search"),
+    (3, "Customer account main menu", "Orders, Profile"),
+]
+
+
 def ensure_customer_section(db):
     if not db.execute("SELECT COUNT(*) FROM segments").fetchone()[0]:
         db.executemany(
             "INSERT INTO segments (id, name, query, percent, last_activity, created_by) VALUES (?, ?, ?, ?, ?, ?)",
             SEGMENTS,
         )
+
+
+def ensure_content_markets(db):
+    if not db.execute("SELECT COUNT(*) FROM meta_entries").fetchone()[0]:
+        db.executemany(
+            "INSERT INTO meta_entries (id, name, kind, swatch, status) VALUES (?, ?, ?, ?, ?)",
+            COLORS,
+        )
+    if not db.execute("SELECT COUNT(*) FROM menus").fetchone()[0]:
+        db.executemany("INSERT INTO menus (id, name, items) VALUES (?, ?, ?)", MENUS)
 
 
 def init_db():
@@ -499,6 +571,7 @@ def init_db():
             ensure_product_editor(db)
             ensure_variant_pages(db)
             ensure_customer_section(db)
+            ensure_content_markets(db)
             return
         db.executemany(
             "INSERT INTO orders (id, created_at, customer, fulfill_by, channel, total, payment, fulfillment, items, delivery_status, delivery_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -611,4 +684,5 @@ def init_db():
         ensure_product_editor(db)
         ensure_variant_pages(db)
         ensure_customer_section(db)
+        ensure_content_markets(db)
 

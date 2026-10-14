@@ -7,6 +7,28 @@
 .orders-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
 .orders-top h1 { font: 600 22px var(--sans); }
 .orders-actions { display: flex; gap: 8px; }
+.orders-actions .ghost, .orders-actions .solid { display: inline-flex; align-items: center; gap: 6px; }
+.empty-mark { width: 140px; height: 110px; flex: none; }
+.empty-copy { padding: 48px 16px; text-align: center; }
+.empty-copy h2 { font-size: 20px; }
+.empty-copy p, .suggest { color: var(--muted); }
+.meta-grid { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 12px; margin-bottom: 12px; }
+.meta-grid .detail-card { margin: 0; display: grid; gap: 8px; align-content: start; }
+.meta-grid .detail-card > span { color: var(--muted); }
+.recent-card { grid-row: span 2; }
+.recent-row { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: center; text-align: left; padding: 4px 0; }
+.recent-row em { color: var(--muted); font-style: normal; }
+.swatches { display: flex; gap: 8px; }
+.swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #e4e4ea; display: inline-block; }
+.market-layout { display: grid; grid-template-columns: 180px 1fr; gap: 12px; align-items: start; }
+.market-rail { display: grid; gap: 4px; background: #f7f7fb; border-radius: 12px; padding: 8px; }
+.market-rail button { display: flex; align-items: center; gap: 6px; text-align: left; padding: 8px 10px; border-radius: 8px; }
+.market-rail button.on, .market-rail button:hover { background: #fff; }
+.market-graph { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; }
+.market-graph button { display: grid; min-width: 140px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; text-align: left; }
+.suggest { background: #f4f0ff; }
+.suggest td { background: transparent; }
+@media (max-width: 1000px) { .meta-grid, .market-layout { grid-template-columns: 1fr; } .recent-card { grid-row: auto; } }
 .ghost, .solid { padding: 7px 14px; border-radius: 999px; font-weight: 600; }
 .ghost { border: 1px solid #d9dbe7; background: #fff; }
 .ghost:hover { border-color: var(--indigo); }
