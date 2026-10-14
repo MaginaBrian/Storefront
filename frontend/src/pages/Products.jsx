@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useApi } from '../lib/api.js'
 import { money } from '../lib/money.js'
+import ProductDetail from './ProductDetail.jsx'
 import { Sheet } from './ui.jsx'
 
 export function Products({ focus = {}, onOpen }) {
@@ -19,6 +20,19 @@ export function Products({ focus = {}, onOpen }) {
   const low = focus.stock === 'low'
   const visible = rows?.filter(r => !low || r.stock <= 14)
   const picked = rows?.find(r => r.title === focus.product)
+  if (focus.product && !focus.add) {
+    if (!rows) return <p className="muted">Loading product…</p>
+    if (!picked) {
+      return (
+        <section className="panel">
+          <h2>{focus.product}</h2>
+          <p>This product is not in the store.</p>
+          <button type="button" className="ghost" onClick={() => onOpen('products')}>Back to products</button>
+        </section>
+      )
+    }
+    return <ProductDetail productId={picked.id} onOpen={onOpen} />
+  }
 
   const save = e => {
     e.preventDefault()

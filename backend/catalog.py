@@ -30,7 +30,136 @@ def add_product():
             (title, price, stock),
         )
         row = dict(db.execute("SELECT * FROM products WHERE id = ?", (cur.lastrowid,)).fetchone())
+        handle = "".join(ch.lower() if ch.isalnum() else "-" for ch in title).strip("-")
+        handle = "-".join(part for part in handle.split("-") if part)
+        db.execute(
+            "UPDATE products SET status = 'active', vendor = 'Maison', handle = ? WHERE id = ?",
+            (handle or f"product-{row['id']}", row["id"]),
+        )
+        row = dict(db.execute("SELECT * FROM products WHERE id = ?", (row["id"],)).fetchone())
     return jsonify(row), 201
+
+
+def product_handle(title, product_id):
+    handle = "".join(ch.lower() if ch.isalnum() else "-" for ch in title).strip("-")
+    handle = "-".join(part for part in handle.split("-") if part)
+    return handle or f"product-{product_id}"
+
+
+def load_product(product_id):
+    rows = query("SELECT * FROM products WHERE id = ?", (product_id,))
+    if not rows:
+        return None
+    product = rows[0]
+    tags = [row["tag"] for row in query("SELECT tag FROM product_tags WHERE product_id = ? ORDER BY tag", (product_id,))]
+    fields = [row["name"] for row in query("SELECT name FROM product_fields WHERE product_id = ? ORDER BY name", (product_id,))]
+    collections = query(
+        "SELECT c.id, c.title FROM collections c JOIN collection_products p ON p.collection_id = c.id WHERE p.product = ? ORDER BY c.title",
+        (product["title"],),
+    )
+    store = query("SELECT domain FROM store WHERE id = 1")
+    name = query("SELECT value FROM settings WHERE key = 'store_name'")
+    return {
+        "product": product,
+        "tags": tags,
+        "fields": fields,
+        "collections": collections,
+        "store": {
+            "name": name[0]["value"] if name else "Maison",
+            "domain": store[0]["domain"] if store else "maison.co.ke",
+        },
+    }
+
+
+@bp.get("/api/products/<int:product_id>")
+def product_detail(product_id):
+    payload = load_product(product_id)
+    if not payload:
+        return jsonify(error="Product not found"), 404
+    return jsonify(payload)
+
+
+@bp.post("/api/products/<int:product_id>")
+def product_action(product_id):
+    if not query("SELECT id FROM products WHERE id = ?", (product_id,)):
+        return jsonify(error="Product not found"), 404
+    body = request.json or {}
+    action = body.get("action")
+    with connect() as db:
+        product = dict(db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone())
+        if action == "update":
+            title = str(body.get("title") if body.get("title") is not None else product["title"]).strip()
+            if not title:
+                return jsonify(error="Title is required"), 400
+            description = str(body.get("description") if body.get("description") is not None else product["description"])
+            status = body.get("status") if body.get("status") in ("active", "draft", "archived") else product["status"]
+            category = str(body.get("category") if body.get("category") is not None else product["category"]).strip()
+            product_type = str(body.get("product_type") if body.get("product_type") is not None else product["product_type"]).strip()
+            vendor = str(body.get("vendor") if body.get("vendor") is not None else product["vendor"]).strip()
+            color = str(body.get("color") if body.get("color") is not None else product["color"]).strip()
+            media = str(body.get("media") if body.get("media") is not None else product["media"]).strip()
+            handle = str(body.get("handle") if body.get("handle") is not None else product["handle"]).strip() or product_handle(title, product_id)
+            if title != product["title"]:
+                db.execute("UPDATE collection_products SET product = ? WHERE product = ?", (title, product["title"]))
+            db.execute(
+                "UPDATE products SET title = ?, description = ?, status = ?, category = ?, product_type = ?, vendor = ?, color = ?, media = ?, handle = ? WHERE id = ?",
+                (title, description, status, category, product_type, vendor, color, media, handle, product_id),
+            )
+        elif action == "tag":
+            tag = str(body.get("tag") or "").strip()
+            if not tag:
+                return jsonify(error="Enter a tag"), 400
+            if body.get("remove"):
+                db.execute("DELETE FROM product_tags WHERE product_id = ? AND tag = ?", (product_id, tag))
+            else:
+                db.execute("INSERT OR IGNORE INTO product_tags (product_id, tag) VALUES (?, ?)", (product_id, tag))
+        elif action == "collection":
+            collection_id = body.get("collection")
+            if body.get("remove"):
+                db.execute(
+                    "DELETE FROM collection_products WHERE collection_id = ? AND product = ?",
+                    (collection_id, product["title"]),
+                )
+            else:
+                db.execute(
+                    "INSERT OR IGNORE INTO collection_products (collection_id, product) VALUES (?, ?)",
+                    (collection_id, product["title"]),
+                )
+        elif action == "field":
+            name = str(body.get("name") or "").strip()
+            if not name:
+                return jsonify(error="Enter a metafield"), 400
+            if body.get("remove"):
+                db.execute("DELETE FROM product_fields WHERE product_id = ? AND name = ?", (product_id, name))
+            else:
+                db.execute("INSERT OR IGNORE INTO product_fields (product_id, name) VALUES (?, ?)", (product_id, name))
+        elif action == "archive":
+            db.execute("UPDATE products SET status = 'archived' WHERE id = ?", (product_id,))
+        elif action == "duplicate":
+            copy_title = f"{product['title']} copy"
+            handle = product_handle(copy_title, product_id + 1000)
+            cur = db.execute(
+                "INSERT INTO products (title, price, stock, sold, description, status, category, product_type, vendor, color, handle, media) VALUES (?, ?, ?, 0, ?, 'draft', ?, ?, ?, ?, ?, ?)",
+                (copy_title, product["price"], product["stock"], product["description"], product["category"], product["product_type"], product["vendor"], product["color"], handle, product["media"]),
+            )
+            product_id = cur.lastrowid
+            db.execute(
+                "INSERT INTO product_tags (product_id, tag) SELECT ?, tag FROM product_tags WHERE product_id = ?",
+                (product_id, product["id"]),
+            )
+            db.execute(
+                "INSERT INTO product_fields (product_id, name) SELECT ?, name FROM product_fields WHERE product_id = ?",
+                (product_id, product["id"]),
+            )
+        elif action == "delete":
+            db.execute("DELETE FROM product_tags WHERE product_id = ?", (product_id,))
+            db.execute("DELETE FROM product_fields WHERE product_id = ?", (product_id,))
+            db.execute("DELETE FROM collection_products WHERE product = ?", (product["title"],))
+            db.execute("DELETE FROM products WHERE id = ?", (product_id,))
+            return jsonify(deleted=True)
+        else:
+            return jsonify(error="Unknown action"), 400
+    return jsonify(load_product(product_id))
 
 
 def collection_rows():

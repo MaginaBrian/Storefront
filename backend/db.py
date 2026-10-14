@@ -358,6 +358,46 @@ def ensure_catalog(db):
         )
 
 
+PRODUCT_EDITOR = {
+    "Linen Overshirt": ("Shirts", "Maison", "", "linen-overshirt"),
+    "Leather Weekender": ("Bags", "Maison", "Black", "leather-weekender"),
+    "Canvas Tote": ("Bags", "Maison", "", "canvas-tote"),
+    "Brass Card Holder": ("Accessories", "Maison", "", "brass-card-holder"),
+}
+
+
+def ensure_product_editor(db):
+    cols = {row[1] for row in db.execute("PRAGMA table_info(products)")}
+    for name, decl in (
+        ("description", "TEXT NOT NULL DEFAULT ''"),
+        ("status", "TEXT NOT NULL DEFAULT 'active'"),
+        ("category", "TEXT NOT NULL DEFAULT ''"),
+        ("product_type", "TEXT NOT NULL DEFAULT ''"),
+        ("vendor", "TEXT NOT NULL DEFAULT 'Maison'"),
+        ("color", "TEXT NOT NULL DEFAULT ''"),
+        ("handle", "TEXT NOT NULL DEFAULT ''"),
+        ("media", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        if name not in cols:
+            db.execute(f"ALTER TABLE products ADD COLUMN {name} {decl}")
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS product_tags (product_id INTEGER NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (product_id, tag))"
+    )
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS product_fields (product_id INTEGER NOT NULL, name TEXT NOT NULL, PRIMARY KEY (product_id, name))"
+    )
+    for title, (category, vendor, color, handle) in PRODUCT_EDITOR.items():
+        db.execute(
+            "UPDATE products SET category = ?, vendor = ?, color = ?, handle = ? WHERE title = ? AND category = ''",
+            (category, vendor, color, handle, title),
+        )
+    if not db.execute("SELECT 1 FROM products WHERE title = 'Mwotaji - Vest'").fetchone():
+        db.execute(
+            "INSERT INTO products (title, price, stock, sold, description, status, category, product_type, vendor, color, handle, media) VALUES (?, ?, ?, 0, '', 'active', ?, '', ?, 'Black', ?, '')",
+            ("Mwotaji - Vest", 30000, 8, "Vests in Activewear Vests & Jackets", "My Store", "mwotaji-vest"),
+        )
+
+
 def init_db():
     with connect() as db:
         db.executescript(SCHEMA)
@@ -369,6 +409,7 @@ def init_db():
             ensure_order_details(db)
             ensure_draft_lines(db)
             ensure_catalog(db)
+            ensure_product_editor(db)
             return
         db.executemany(
             "INSERT INTO orders (id, created_at, customer, fulfill_by, channel, total, payment, fulfillment, items, delivery_status, delivery_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -478,4 +519,5 @@ def init_db():
         ensure_order_details(db)
         ensure_draft_lines(db)
         ensure_catalog(db)
+        ensure_product_editor(db)
 
