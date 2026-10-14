@@ -640,9 +640,9 @@ CATALOG_ITEMS = [
 ]
 
 GENERAL_SETTINGS = [
-    ("entity_name", "My Store", "Business name", 10),
+    ("entity_name", "Maison", "Business name", 10),
     ("entity_country", "Kenya", "Business country", 11),
-    ("contact_email", "cosinecreate@gmail.com", "Contact email", 12),
+    ("contact_email", "hello@maison.co.ke", "Contact email", 12),
     ("phone", "", "Phone", 13),
     ("address", "Nairobi, Nairobi, 00100, Kenya", "Store address", 14),
     ("currency_label", "Kenyan Shilling (KES)", "Currency display", 15),
@@ -688,6 +688,10 @@ def ensure_content_markets(db):
                 "INSERT INTO settings (key, value, label, sort) VALUES (?, ?, ?, ?)",
                 (key, value, label, sort),
             )
+    db.execute("UPDATE settings SET value = 'Maison' WHERE key = 'entity_name' AND value = 'My Store'")
+    db.execute(
+        "UPDATE settings SET value = 'hello@maison.co.ke' WHERE key = 'contact_email' AND value = 'cosinecreate@gmail.com'"
+    )
 
 
 def init_db():

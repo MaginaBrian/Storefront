@@ -113,7 +113,8 @@ tr.picked td { background: #eef0ff; }
 .order-id-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .choice { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }
 .archive-lead { margin-top: 14px; }
-.settings-editor .orders-actions { justify-content: flex-end; margin-top: 12px; }
+.settings-editor .orders-actions, .settings-block .orders-actions { margin-top: 12px; }
+.settings-editor .orders-actions { justify-content: flex-end; }
 .settings-section .orders-actions { margin-top: 14px; }
 .settings { display: grid; gap: 12px; max-width: 480px; }
 .settings label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }

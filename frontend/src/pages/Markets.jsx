@@ -51,7 +51,7 @@ function MarketDetail({ market, onOpen, onSaved }) {
     [Receipt, 'Taxes and duties', 'Collecting sales tax'],
     [RotateCcw, 'Returns and cancellations', 'No rules set'],
     [Store, 'Online Store', store?.theme || 'Dawn', () => onOpen('store')],
-    [Library, 'Checkout and accounts', 'My Store configuration', () => onOpen('settings')],
+    [Library, 'Checkout and accounts', 'Maison configuration', () => onOpen('settings')],
   ]
   return (
     <div className="order-page">
