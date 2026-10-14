@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
@@ -230,6 +231,48 @@ def add_inventory():
     return jsonify(row), 201
 
 
+@bp.post("/api/inventory/<int:item_id>")
+def inventory_action(item_id):
+    if not query("SELECT id FROM inventory WHERE id = ?", (item_id,)):
+        return jsonify(error="Variant not found"), 404
+    body = request.json or {}
+    action = body.get("action")
+    with connect() as db:
+        item = dict(db.execute("SELECT * FROM inventory WHERE id = ?", (item_id,)).fetchone())
+        if action == "update":
+            variant = str(body.get("variant") if body.get("variant") is not None else item["variant"]).strip() or item["variant"]
+            try:
+                price = int(body.get("price") if body.get("price") is not None else item["price"])
+                on_hand = int(body.get("on_hand") if body.get("on_hand") is not None else item["on_hand"])
+                unavailable = int(body.get("unavailable") if body.get("unavailable") is not None else item["unavailable"])
+                committed = int(body.get("committed") if body.get("committed") is not None else item["committed"])
+                weight = int(body.get("weight") if body.get("weight") is not None else item["weight"])
+            except (TypeError, ValueError):
+                return jsonify(error="Quantities must be numbers"), 400
+            available = max(on_hand - unavailable - committed, 0)
+            location = str(body.get("location") if body.get("location") is not None else item["location"]).strip() or "Nairobi"
+            tracked = 1 if body.get("tracked", item["tracked"]) else 0
+            physical = 1 if body.get("physical", item["physical"]) else 0
+            continue_selling = 1 if body.get("continue_selling", item["continue_selling"]) else 0
+            db.execute(
+                "UPDATE inventory SET variant = ?, price = ?, on_hand = ?, unavailable = ?, committed = ?, available = ?, weight = ?, location = ?, tracked = ?, physical = ?, continue_selling = ? WHERE id = ?",
+                (variant, price, on_hand, unavailable, committed, available, weight, location, tracked, physical, continue_selling, item_id),
+            )
+        elif action == "duplicate":
+            cur = db.execute(
+                "INSERT INTO inventory (product, variant, sku, unavailable, committed, available, on_hand, incoming, price, weight, location, tracked, physical, continue_selling) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (item["product"], f"{item['variant']} copy", item["sku"], item["unavailable"], item["committed"], item["available"], item["on_hand"], item["incoming"], item["price"], item["weight"], item["location"], item["tracked"], item["physical"], item["continue_selling"]),
+            )
+            item_id = cur.lastrowid
+        elif action == "delete":
+            db.execute("DELETE FROM inventory WHERE id = ?", (item_id,))
+            return jsonify(deleted=True)
+        else:
+            return jsonify(error="Unknown action"), 400
+        row = dict(db.execute("SELECT * FROM inventory WHERE id = ?", (item_id,)).fetchone())
+    return jsonify(row)
+
+
 @bp.get("/api/purchase-orders")
 def purchase_orders():
     return jsonify(query("SELECT * FROM purchase_orders ORDER BY id DESC"))
@@ -242,10 +285,20 @@ def create_purchase_order():
     if not supplier:
         return jsonify(error="Supplier is required"), 400
     created = datetime.now().replace(microsecond=0).isoformat()
+    lines = body.get("lines") if isinstance(body.get("lines"), list) else []
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO purchase_orders (supplier, status, created_at) VALUES (?, 'draft', ?)",
-            (supplier, created),
+            "INSERT INTO purchase_orders (supplier, status, created_at, destination, reference, note, terms, currency, tags, lines) VALUES (?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                supplier, created,
+                str(body.get("destination") or "").strip(),
+                str(body.get("reference") or "")[:255],
+                str(body.get("note") or "")[:5000],
+                str(body.get("terms") or "").strip(),
+                str(body.get("currency") or "KES").strip() or "KES",
+                str(body.get("tags") or "")[:40],
+                json.dumps(lines),
+            ),
         )
         row = dict(db.execute("SELECT * FROM purchase_orders WHERE id = ?", (cur.lastrowid,)).fetchone())
     return jsonify(row), 201
@@ -264,10 +317,18 @@ def create_transfer():
     if not origin or not destination:
         return jsonify(error="Origin and destination are required"), 400
     created = datetime.now().replace(microsecond=0).isoformat()
+    lines = body.get("lines") if isinstance(body.get("lines"), list) else []
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO transfers (origin, destination, status, created_at) VALUES (?, ?, 'draft', ?)",
-            (origin, destination, created),
+            "INSERT INTO transfers (origin, destination, status, created_at, reference, note, tags, lines, purchase_order) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)",
+            (
+                origin, destination, created,
+                str(body.get("reference") or "").strip(),
+                str(body.get("note") or "").strip(),
+                str(body.get("tags") or "").strip(),
+                json.dumps(lines),
+                str(body.get("purchase_order") or "").strip(),
+            ),
         )
         row = dict(db.execute("SELECT * FROM transfers WHERE id = ?", (cur.lastrowid,)).fetchone())
     return jsonify(row), 201
@@ -282,7 +343,7 @@ def gift_cards():
 def create_gift_card():
     body = request.json or {}
     customer = str(body.get("customer") or "").strip()
-    code = str(body.get("code") or "").strip().upper()
+    code = str(body.get("code") or "").strip()
     try:
         balance = int(body.get("balance") or 0)
     except (TypeError, ValueError):
@@ -293,8 +354,8 @@ def create_gift_card():
         code = f"GIFT{balance or 1000}"
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO gift_cards (code, customer, balance, status) VALUES (?, ?, ?, 'active')",
-            (code, customer or None, balance),
+            "INSERT INTO gift_cards (code, customer, balance, status, note, expires) VALUES (?, ?, ?, 'active', ?, ?)",
+            (code, customer or None, balance, str(body.get("note") or "").strip(), str(body.get("expires") or "").strip()),
         )
         row = dict(db.execute("SELECT * FROM gift_cards WHERE id = ?", (cur.lastrowid,)).fetchone())
     return jsonify(row), 201

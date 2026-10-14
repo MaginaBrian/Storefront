@@ -3,9 +3,16 @@ import { useApi } from '../lib/api.js'
 import { money } from '../lib/money.js'
 import { Sheet } from './ui.jsx'
 
+function activityLabel(iso) {
+  const date = new Date(`${iso}T00:00:00`)
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export function Customers({ focus = {}, onOpen }) {
   const [profile, setProfile] = useState(null)
   const [rows] = useApi('/api/customers')
+  const [segment, setSegment] = useState(null)
+  const [segmentRows, setSegmentRows] = useState(null)
   useEffect(() => {
     if (!focus.customer) { setProfile(null); return }
     let ignore = false
@@ -15,6 +22,16 @@ export function Customers({ focus = {}, onOpen }) {
     })
     return () => { ignore = true }
   }, [focus.customer])
+  useEffect(() => {
+    if (!focus.segment) { setSegment(null); setSegmentRows(null); return }
+    let ignore = false
+    fetch(`/api/segments/${focus.segment}`).then(r => r.json()).then(data => {
+      if (ignore) return
+      setSegment(data.segment || null)
+      setSegmentRows(data.customers || [])
+    })
+    return () => { ignore = true }
+  }, [focus.segment])
   const person = profile?.customer
   const detail = !profile
     ? 'Loading profile…'
@@ -23,6 +40,15 @@ export function Customers({ focus = {}, onOpen }) {
       : 'No saved profile for this name yet.'
   return (
     <>
+      {segment && (
+        <section className="handoff">
+          <div>
+            <h2>{segment.name}</h2>
+            <p>{segment.percent}% of customers · Created on {activityLabel(segment.last_activity)} · {segment.created_by}</p>
+          </div>
+          <button type="button" className="ghost" onClick={() => onOpen('segments')}>All segments</button>
+        </section>
+      )}
       {focus.customer && (
         <section className="handoff">
           <div>
@@ -69,7 +95,7 @@ export function Customers({ focus = {}, onOpen }) {
           </table>
         </div>
       )}
-      <Sheet title="Customers" rows={rows} empty="No customers yet." picked={r => r.name === focus.customer} columns={[
+      <Sheet title="Customers" rows={focus.segment ? segmentRows : rows} empty={focus.segment ? 'No customers in this segment.' : 'No customers yet.'} picked={r => r.name === focus.customer} columns={[
         { key: 'name', label: 'Customer', render: r => <button type="button" className="text-link" onClick={() => onOpen('customers', { customer: r.name })}>{r.name}</button> },
         { key: 'email', label: 'Email', render: r => r.email || '—' },
         { key: 'location', label: 'Location' },

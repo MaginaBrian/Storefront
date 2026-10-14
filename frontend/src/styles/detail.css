@@ -127,5 +127,57 @@ tr.picked td { background: #eef0ff; }
 .menu-pop .danger { color: var(--red); }
 .type-mark { font-weight: 700; }
 .box-mark { width: 12px; height: 10px; border: 1.5px solid currentColor; border-radius: 2px; display: inline-block; }
+.variant-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+.variant-nav .finder { margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.variant-product { display: flex; gap: 10px; align-items: flex-start; }
+.thumb, .swatch { width: 54px; height: 54px; border: 1px dashed #d9dbe7; border-radius: 10px; display: grid; place-items: center; color: var(--muted); }
+.variant-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 2px; }
+.variant-list button, .variant-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; padding: 8px; border-radius: 8px; }
+.variant-list button.on, .variant-list button:hover { background: #f3f3f8; }
+.variant-hero { display: flex; gap: 14px; align-items: center; }
+.variant-name, .money-input input, .qty { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; }
+.variant-name { font-size: 18px; font-weight: 600; width: 100%; }
+.color-chip { display: inline-flex; width: fit-content; padding: 4px 8px; border-radius: 8px; background: #e7f4f4; }
+.money-input { display: flex; align-items: center; gap: 8px; }
+.money-input input { flex: 1; }
+.switch { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: var(--muted); }
+.qty { width: 72px; }
+.dims { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
+.dims input { width: 64px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
+.danger-btn { color: var(--red); border-color: #f3c2c2; }
+.route-card { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.route-card select, .po-search { flex: 1; min-width: 160px; }
+.po-search { margin-top: 12px; }
+.transit { padding: 6px 10px; border-radius: 999px; background: #f3f3f8; }
+.block-link { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.save-bar { position: sticky; top: 0; z-index: 2; display: flex; justify-content: center; align-items: center; gap: 8px; background: #1a1c2c; color: #fff; border-radius: 999px; padding: 8px 12px; width: fit-content; margin: 0 auto 12px; }
+.save-bar .ghost { color: #fff; border-color: transparent; }
+.gift-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.creator { display: inline-flex; align-items: center; gap: 6px; }
+.creator svg { color: #008060; }
+.activity { color: var(--muted); }
+.sort-mark { vertical-align: middle; color: var(--muted); }
+.company-page { max-width: 760px; }
+.company-page > h1 { font: 600 28px var(--sans); }
+.company-page > h2 { font-size: 14px; margin: 4px 0; }
+.hint { display: block; color: var(--muted); font-weight: 400; font-size: 12px; margin-top: 4px; }
+.section-head { display: flex; justify-content: space-between; align-items: center; }
+.addr-btn { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 12px 0 4px; color: var(--text); }
+.addr-btn span { display: inline-flex; align-items: center; gap: 8px; }
+.check-row, .radio-row { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; font-weight: 500; }
+.radio-row small { display: block; color: var(--muted); font-weight: 400; }
+.market-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.market-chip { padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fafafd; }
+.market-chip.on { border-color: var(--indigo); }
+.catalog-note { color: var(--muted); }
+.field-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.field-search input { flex: 1; border: 0; outline: 0; font: inherit; }
+.match-list { display: grid; margin-top: 8px; }
+.match-list button { text-align: left; padding: 8px; border-radius: 8px; }
+.match-list button:hover { background: #f6f6fb; }
+.company-page .detail-card select { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; background: #fff; }
+.panel .solid { margin-top: 16px; }
+.gift-row em { color: var(--muted); font-style: normal; white-space: nowrap; }
+@media (max-width: 1000px) { .variant-layout, .gift-row { grid-template-columns: 1fr; } }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

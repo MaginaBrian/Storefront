@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Image } from 'lucide-react'
 import { useJson } from '../lib/api.js'
 import { csv } from '../lib/csv.js'
+import VariantEditor from './VariantEditor.jsx'
 import { FormModal, Toolbar } from './ui.jsx'
 
 export function Inventory({ focus = {}, onOpen }) {
@@ -19,6 +20,19 @@ export function Inventory({ focus = {}, onOpen }) {
     return `${r.product} ${r.variant}`.toLowerCase().includes(q)
   }), [rows, query, focus.product])
   const picked = (rows || []).find(r => String(r.id) === String(focus.item))
+  if (focus.item) {
+    if (!rows) return <p className="muted">Loading inventory…</p>
+    if (!picked) {
+      return (
+        <section className="panel">
+          <h2>Variant</h2>
+          <p>This variant is not in inventory.</p>
+          <button type="button" className="ghost" onClick={() => onOpen('inventory')}>Back to inventory</button>
+        </section>
+      )
+    }
+    return <VariantEditor item={picked} rows={rows} onOpen={onOpen} onChanged={reload} />
+  }
   const save = e => {
     e.preventDefault()
     const qty = Number(onHand)

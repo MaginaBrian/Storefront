@@ -1,28 +1,11 @@
-import { useState } from 'react'
 import { useJson } from '../lib/api.js'
 import { csv } from '../lib/csv.js'
-import { FormModal, GiftMark } from './ui.jsx'
+import { CreateGiftCard } from './CreateForms.jsx'
+import { GiftMark } from './ui.jsx'
 
-export function GiftCards({ onOpen }) {
+export function GiftCards({ onOpen, focus = {} }) {
   const [rows, reload] = useJson('/api/gift-cards')
-  const [open, setOpen] = useState(false)
-  const [code, setCode] = useState('')
-  const [customer, setCustomer] = useState('')
-  const [amount, setAmount] = useState('')
-  const [error, setError] = useState('')
-  const save = e => {
-    e.preventDefault()
-    const cents = Math.round(Number(amount) * 100)
-    if (!Number.isFinite(cents) || cents < 0) { setError('Enter a balance.'); return }
-    fetch('/api/gift-cards', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, customer, balance: cents }),
-    }).then(async r => {
-      if (!r.ok) throw new Error((await r.json()).error || 'Could not save')
-      setOpen(false); setCode(''); setCustomer(''); setAmount(''); setError('')
-      reload()
-    }).catch(err => setError(err.message))
-  }
+  if (focus.create === '1') return <CreateGiftCard onOpen={onOpen} onSaved={reload} />
   if (!rows) return <p className="muted">Loading gift cards…</p>
   return (
     <>
@@ -37,7 +20,7 @@ export function GiftCards({ onOpen }) {
             <h2>Start selling gift cards</h2>
             <p>Add gift card products to sell or create gift cards and send them directly to your customers.</p>
             <div className="orders-actions" style={{ marginTop: 16 }}>
-              <button type="button" className="ghost" onClick={() => setOpen(true)}>Create gift card</button>
+              <button type="button" className="ghost" onClick={() => onOpen('gift-cards', { create: '1' })}>Create gift card</button>
               <button type="button" className="solid" onClick={() => onOpen('products', { add: '1', gift: '1' })}>Add gift card product</button>
             </div>
           </div>
@@ -60,19 +43,6 @@ export function GiftCards({ onOpen }) {
         </div>
       )}
       <a className="learn" href="https://help.shopify.com/en/manual/products/gift-card-products" target="_blank" rel="noreferrer">Learn more about gift cards</a>
-      {open && (
-        <FormModal title="Create gift card" onClose={() => setOpen(false)}>{
-          {
-            onSubmit: save,
-            error,
-            fields: <>
-              <label>Code<input value={code} onChange={e => setCode(e.target.value)} placeholder="GIFT1000" /></label>
-              <label>Customer<input value={customer} onChange={e => setCustomer(e.target.value)} /></label>
-              <label>Balance (KES)<input inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></label>
-            </>,
-          }
-        }</FormModal>
-      )}
     </>
   )
 }

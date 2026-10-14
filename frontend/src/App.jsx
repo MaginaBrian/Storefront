@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Search, Smartphone, Tag } from 'lucide-react'
+import { Inbox, Search, Smartphone, Tag, Users } from 'lucide-react'
 import CatalogSection from './catalog/index.jsx'
 import Home from './home/Home.jsx'
 import { useApi } from './lib/api.js'
-import { CHANNELS, NAV, PRODUCT_VIEWS, SETTINGS, readRoute } from './nav.js'
+import { CHANNELS, CUSTOMER_VIEWS, NAV, PRODUCT_VIEWS, SETTINGS, readRoute } from './nav.js'
 import OrdersSection from './orders/index.jsx'
-import { AgenticPage, Analytics, Content, Customers, Discounts, Growth, Markets, Products, Settings as SettingsPage, StorePage } from './pages/index.js'
+import { AgenticPage, Analytics, Companies, Content, Customers, Discounts, Growth, Markets, Products, Segments, Settings as SettingsPage, StorePage } from './pages/index.js'
 
 export default function App() {
   const initial = readRoute()
@@ -54,7 +54,7 @@ export default function App() {
     setSearch('')
     setHits([])
   }
-  const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }, { id: 'collections', label: 'Collections' }, { id: 'inventory', label: 'Inventory' }, { id: 'purchase-orders', label: 'Purchase orders' }, { id: 'transfers', label: 'Transfers' }, { id: 'gift-cards', label: 'Gift cards' }]
+  const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }, { id: 'collections', label: 'Collections' }, { id: 'inventory', label: 'Inventory' }, { id: 'purchase-orders', label: 'Purchase orders' }, { id: 'transfers', label: 'Transfers' }, { id: 'gift-cards', label: 'Gift cards' }, { id: 'segments', label: 'Segments' }, { id: 'companies', label: 'Companies' }]
   const pageHits = search.trim().length < 2 ? [] : pages.filter(p => p.label.toLowerCase().includes(search.trim().toLowerCase()))
   const item = ({ id, label, icon: Icon }) => (
     <button key={id} className={`nav ${view === id ? 'on' : ''}`} onClick={() => setView(id)}>
@@ -63,6 +63,7 @@ export default function App() {
   )
   const ordersOpen = view === 'orders' || view === 'drafts' || view === 'checkouts'
   const productsOpen = view === 'products' || PRODUCT_VIEWS.includes(view)
+  const customersOpen = view === 'customers' || CUSTOMER_VIEWS.includes(view)
   return (
     <div className="shell">
       <aside>
@@ -102,6 +103,16 @@ export default function App() {
               <button className={`sub ${view === 'gift-cards' ? 'on' : ''}`} onClick={() => setView('gift-cards')}>Gift cards</button>
             </>}
           </div>
+        ) : entry.id === 'customers' ? (
+          <div key="customers" className="nest">
+            <button className={`nav ${view === 'customers' ? 'on' : ''}`} onClick={() => setView('customers')}>
+              <Users size={17} strokeWidth={1.6} />Customers
+            </button>
+            {customersOpen && <>
+              <button className={`sub ${view === 'segments' ? 'on' : ''}`} onClick={() => setView('segments')}>Segments</button>
+              <button className={`sub ${view === 'companies' ? 'on' : ''}`} onClick={() => setView('companies')}>Companies</button>
+            </>}
+          </div>
         ) : item(entry))}</nav>
         <p className="group">Sales channels</p>
         <nav>{CHANNELS.map(item)}</nav>
@@ -118,6 +129,8 @@ export default function App() {
         {view === 'products' && <Products focus={focus} onOpen={setView} />}
         {PRODUCT_VIEWS.includes(view) && <CatalogSection view={view} focus={focus} onOpen={setView} />}
         {view === 'customers' && <Customers focus={focus} onOpen={setView} />}
+        {view === 'segments' && <Segments onOpen={setView} />}
+        {view === 'companies' && <Companies focus={focus} onOpen={setView} />}
         {view === 'discounts' && <Discounts />}
         {view === 'content' && <Content />}
         {view === 'markets' && <Markets />}

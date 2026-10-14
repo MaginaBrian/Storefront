@@ -113,6 +113,32 @@ CREATE TABLE IF NOT EXISTS checkouts (
   total INTEGER NOT NULL,
   status TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS segments (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  query TEXT NOT NULL,
+  percent INTEGER NOT NULL,
+  last_activity TEXT NOT NULL,
+  created_by TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS companies (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  external_id TEXT NOT NULL DEFAULT '',
+  contact TEXT NOT NULL DEFAULT '',
+  address TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL DEFAULT '',
+  location_id TEXT NOT NULL DEFAULT '',
+  billing_same INTEGER NOT NULL DEFAULT 1,
+  billing_address TEXT NOT NULL DEFAULT '',
+  market TEXT NOT NULL DEFAULT 'Kenya',
+  terms TEXT NOT NULL DEFAULT 'No payment terms',
+  one_time_address INTEGER NOT NULL DEFAULT 0,
+  submission TEXT NOT NULL DEFAULT 'auto',
+  tax_id TEXT NOT NULL DEFAULT '',
+  tax_settings TEXT NOT NULL DEFAULT 'Collect tax',
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS order_detail (
   order_id INTEGER PRIMARY KEY,
   confirmation TEXT NOT NULL,
@@ -398,6 +424,67 @@ def ensure_product_editor(db):
         )
 
 
+def _add_col(db, table, name, decl):
+    cols = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+    if name not in cols:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+
+def ensure_variant_pages(db):
+    for name, decl in (
+        ("price", "INTEGER NOT NULL DEFAULT 0"),
+        ("weight", "INTEGER NOT NULL DEFAULT 1000"),
+        ("location", "TEXT NOT NULL DEFAULT 'Nairobi'"),
+        ("tracked", "INTEGER NOT NULL DEFAULT 1"),
+        ("physical", "INTEGER NOT NULL DEFAULT 1"),
+        ("continue_selling", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        _add_col(db, "inventory", name, decl)
+    db.execute(
+        "UPDATE inventory SET price = 148700 WHERE variant = 'Teal' AND product LIKE 'A1544%' AND price = 0"
+    )
+    for name, decl in (
+        ("destination", "TEXT NOT NULL DEFAULT ''"),
+        ("reference", "TEXT NOT NULL DEFAULT ''"),
+        ("note", "TEXT NOT NULL DEFAULT ''"),
+        ("terms", "TEXT NOT NULL DEFAULT ''"),
+        ("currency", "TEXT NOT NULL DEFAULT 'KES'"),
+        ("tags", "TEXT NOT NULL DEFAULT ''"),
+        ("lines", "TEXT NOT NULL DEFAULT '[]'"),
+    ):
+        _add_col(db, "purchase_orders", name, decl)
+    for name, decl in (
+        ("reference", "TEXT NOT NULL DEFAULT ''"),
+        ("note", "TEXT NOT NULL DEFAULT ''"),
+        ("tags", "TEXT NOT NULL DEFAULT ''"),
+        ("lines", "TEXT NOT NULL DEFAULT '[]'"),
+        ("purchase_order", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        _add_col(db, "transfers", name, decl)
+    for name, decl in (
+        ("note", "TEXT NOT NULL DEFAULT ''"),
+        ("expires", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        _add_col(db, "gift_cards", name, decl)
+
+
+SEGMENTS = [
+    (1, "Customers who have purchased at least once", "purchased", 100, "2026-09-27", "Shopify"),
+    (2, "Email subscribers", "subscribers", 0, "2026-09-27", "Shopify"),
+    (3, "Abandoned checkouts in the last 30 days", "abandoned", 0, "2026-09-27", "Shopify"),
+    (4, "Customers who have purchased more than once", "repeat", 0, "2026-09-27", "Shopify"),
+    (5, "Customers who haven't purchased", "never", 0, "2026-09-27", "Shopify"),
+]
+
+
+def ensure_customer_section(db):
+    if not db.execute("SELECT COUNT(*) FROM segments").fetchone()[0]:
+        db.executemany(
+            "INSERT INTO segments (id, name, query, percent, last_activity, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+            SEGMENTS,
+        )
+
+
 def init_db():
     with connect() as db:
         db.executescript(SCHEMA)
@@ -410,6 +497,8 @@ def init_db():
             ensure_draft_lines(db)
             ensure_catalog(db)
             ensure_product_editor(db)
+            ensure_variant_pages(db)
+            ensure_customer_section(db)
             return
         db.executemany(
             "INSERT INTO orders (id, created_at, customer, fulfill_by, channel, total, payment, fulfillment, items, delivery_status, delivery_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -520,4 +609,6 @@ def init_db():
         ensure_draft_lines(db)
         ensure_catalog(db)
         ensure_product_editor(db)
+        ensure_variant_pages(db)
+        ensure_customer_section(db)
 
