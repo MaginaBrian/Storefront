@@ -3,6 +3,8 @@ import {
   House, Inbox, Tag, Users, TrendingUp, Percent, FileText, Globe, BarChart3,
   Store, Sparkles, Settings, Search, Plus, Smartphone,
 } from 'lucide-react'
+import OrdersSection from './Orders.jsx'
+import { Products, Customers, Discounts, Content, Markets, Growth, Analytics, StorePage, AgenticPage, Settings as SettingsPage } from './Pages.jsx'
 
 const NAV = [
   { id: 'home', label: 'Home', icon: House },
@@ -21,7 +23,12 @@ const CHANNELS = [
 ]
 const SETTINGS = { id: 'settings', label: 'Settings', icon: Settings }
 
-const money = (n, c = 'KES') => `${c} ${(n / 100).toLocaleString()}`
+const VIEWS = new Set([...NAV, ...CHANNELS, SETTINGS].map(n => n.id).concat(['drafts', 'checkouts']))
+
+function readView() {
+  const id = location.hash.replace(/^#\/?/, '')
+  return VIEWS.has(id) ? id : 'home'
+}
 
 function useApi(path) {
   const [data, setData] = useState(null)
@@ -52,21 +59,21 @@ function Donut({ data }) {
   )
 }
 
-function Home() {
+function Home({ onOpen }) {
   const [d] = useApi('/api/dashboard')
   if (!d) return null
   return (
     <>
       <div className="page-head">
         <h1 className="title">Sales performance</h1>
-        <button className="cta"><Plus size={15} /> Add product</button>
+        <button className="cta" onClick={() => onOpen('products', 'add')}><Plus size={15} /> Add product</button>
       </div>
       <section className="kpis">
         {d.kpis.map(k => (
-          <div className="card kpi" key={k.label}>
+          <button type="button" className="card kpi" key={k.label} onClick={() => onOpen(k.label === 'Orders' ? 'orders' : k.label === 'New customers' ? 'customers' : k.label === 'Low stock' ? 'products' : 'analytics')}>
             <div className="kpi-top"><span>{k.label}</span><i style={{ background: TONES[k.tone][0], color: TONES[k.tone][1] }} /></div>
             <div className="kpi-val"><strong>{k.value}</strong><em className={k.good ? 'up' : 'down'}>{k.note}</em></div>
-          </div>
+          </button>
         ))}
       </section>
       <section className="row two">
@@ -77,9 +84,11 @@ function Home() {
             <ul>
               {d.channels.map((c, i) => (
                 <li key={c.name}>
+                  <button type="button" className="channel-hit" onClick={() => onOpen(c.view)}>
                   <b style={{ background: SHADES[i] }} />
                   <div><span>{c.name}</span><strong>KES {c.sales.toLocaleString()}</strong></div>
                   <div className="r"><span>{c.orders} orders</span><em className={c.delta > 0 ? 'up' : 'down'}>{Math.abs(c.delta)}%</em></div>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -96,12 +105,12 @@ function Home() {
       </section>
       <section className="row two b">
         <div className="card">
-          <div className="between"><h3>Recent orders</h3><button className="btn">View all</button></div>
+          <div className="between"><h3>Recent orders</h3><button className="btn" onClick={() => onOpen('orders')}>View all</button></div>
           <table>
             <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
             <tbody>
               {d.recent.map(r => (
-                <tr key={r.id}><td>#{r.id}</td><td>{r.customer}</td><td>{r.date}</td><td>{r.amount}</td>
+                <tr key={r.id} className="clickable" onClick={() => onOpen('orders')}><td>#{r.id}</td><td>{r.customer}</td><td>{r.date}</td><td>{r.amount}</td>
                   <td><span className={`pill ${r.status.toLowerCase()}`}>{r.status}</span></td></tr>
               ))}
             </tbody>
@@ -111,8 +120,8 @@ function Home() {
           <h3>Top products</h3>
           <ul className="top">
             {d.top.map((t, i) => (
-              <li key={t.title}><b style={{ background: SHADES[i % 4] }}>{t.title[0]}</b>
-                <div><strong>{t.title}</strong><small>{t.sold} units sold</small></div><span>{t.sales}</span></li>
+              <li key={t.title}><button type="button" className="top-hit" onClick={() => onOpen('products')}><b style={{ background: SHADES[i % 4] }}>{t.title[0]}</b>
+                <div><strong>{t.title}</strong><small>{t.sold} units sold</small></div><span>{t.sales}</span></button></li>
             ))}
           </ul>
         </div>
@@ -121,71 +130,72 @@ function Home() {
   )
 }
 
-function Orders() {
-  const [rows, reload] = useApi('/api/orders')
-  const fulfil = id =>
-    fetch(`/api/orders/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'fulfilled' }),
-    }).then(reload)
-  return (
-    <>
-      <h1 className="title">Orders</h1>
-      <table>
-        <thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Status</th><th /></tr></thead>
-        <tbody>
-          {rows?.map(r => (
-            <tr key={r.id}>
-              <td>#{r.id}</td><td>{r.customer}</td><td>{money(r.total)}</td>
-              <td><span className={`pill ${r.status}`}>{r.status}</span></td>
-              <td>{r.status !== 'fulfilled' && <button className="btn" onClick={() => fulfil(r.id)}>Mark fulfilled</button>}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  )
-}
-
-function Products() {
-  const [rows] = useApi('/api/products')
-  return (
-    <>
-      <h1 className="title">Products</h1>
-      <table>
-        <thead><tr><th>Product</th><th>Price</th><th>In stock</th></tr></thead>
-        <tbody>
-          {rows?.map(r => (
-            <tr key={r.id}><td>{r.title}</td><td>{money(r.price)}</td><td>{r.stock}</td></tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  )
-}
-
-const Soon = ({ name }) => (
-  <>
-    <h1 className="title">{name}</h1>
-    <p className="muted">Nothing here yet. This section is ready for you to build.</p>
-  </>
-)
-
 export default function App() {
-  const [view, setView] = useState('home')
-  const label = [...NAV, ...CHANNELS, SETTINGS].find(n => n.id === view).label
+  const [view, setViewState] = useState(readView)
+  const [boot, setBoot] = useState(null)
+  const [summary, reloadSummary] = useApi('/api/orders/summary')
+  const [search, setSearch] = useState('')
+  const [hits, setHits] = useState([])
+  useEffect(() => {
+    const sync = () => setViewState(readView())
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+  useEffect(() => {
+    const focus = e => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        document.getElementById('nav-search')?.focus()
+      }
+    }
+    window.addEventListener('keydown', focus)
+    return () => window.removeEventListener('keydown', focus)
+  }, [])
+  useEffect(() => {
+    if (search.trim().length < 2) { setHits([]); return }
+    const handle = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(search.trim())}`).then(r => r.json()).then(setHits).catch(() => setHits([]))
+    }, 150)
+    return () => clearTimeout(handle)
+  }, [search])
+  const setView = (id, extra) => {
+    setBoot(extra ? { id: extra, n: Date.now() } : null)
+    setSearch('')
+    setHits([])
+    const next = `#/${id}`
+    if (location.hash !== next) location.hash = next
+    setViewState(id)
+  }
+  const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }]
+  const pageHits = search.trim().length < 2 ? [] : pages.filter(p => p.label.toLowerCase().includes(search.trim().toLowerCase()))
   const item = ({ id, label, icon: Icon }) => (
     <button key={id} className={`nav ${view === id ? 'on' : ''}`} onClick={() => setView(id)}>
       <Icon size={17} strokeWidth={1.6} />{label}
     </button>
   )
+  const ordersOpen = view === 'orders' || view === 'drafts' || view === 'checkouts'
   return (
     <div className="shell">
       <aside>
-        <div className="brand">Maison</div>
-        <label className="search"><Search size={15} /><input placeholder="Search" /><kbd>Ctrl K</kbd></label>
-        <nav>{NAV.map(item)}</nav>
+        <button type="button" className="brand" onClick={() => setView('home')}>Maison</button>
+        <label className="search"><Search size={15} /><input id="nav-search" placeholder="Search" value={search} onChange={e => setSearch(e.target.value)} /><kbd>Ctrl K</kbd>
+          {(pageHits.length > 0 || hits.length > 0) && (
+            <div className="search-results">
+              {pageHits.map(p => <button type="button" key={p.id} onClick={() => setView(p.id)}>{p.label}</button>)}
+              {hits.map(h => <button type="button" key={h.label} onClick={() => setView(h.view)}>{h.label}</button>)}
+            </div>
+          )}
+        </label>
+        <nav>{NAV.map(entry => entry.id === 'orders' ? (
+          <div key="orders" className="nest">
+            <button className={`nav ${view === 'orders' ? 'on' : ''}`} onClick={() => setView('orders')}>
+              <Inbox size={17} strokeWidth={1.6} />Orders
+              {summary?.unfulfilled > 0 && <span className="count">{summary.unfulfilled}</span>}
+            </button>
+            <button className={`sub ${view === 'drafts' ? 'on' : ''}`} onClick={() => setView('drafts')}>Drafts</button>
+            <button className={`sub ${view === 'checkouts' ? 'on' : ''}`} onClick={() => setView('checkouts')}>Abandoned checkouts</button>
+          </div>
+        ) : item(entry))}</nav>
         <p className="group">Sales channels</p>
         <nav>{CHANNELS.map(item)}</nav>
         <div className="promo">
@@ -196,8 +206,18 @@ export default function App() {
         <div className="foot">{item(SETTINGS)}</div>
       </aside>
       <main>
-        {view === 'home' ? <Home /> : view === 'orders' ? <Orders />
-          : view === 'products' ? <Products /> : <Soon name={label} />}
+        {view === 'home' && <Home onOpen={setView} />}
+        {ordersOpen && <OrdersSection view={view} onChanged={reloadSummary} onOpen={setView} />}
+        {view === 'products' && <Products boot={boot} />}
+        {view === 'customers' && <Customers />}
+        {view === 'discounts' && <Discounts />}
+        {view === 'content' && <Content />}
+        {view === 'markets' && <Markets />}
+        {view === 'growth' && <Growth />}
+        {view === 'analytics' && <Analytics onOpen={setView} />}
+        {view === 'store' && <StorePage />}
+        {view === 'agentic' && <AgenticPage />}
+        {view === 'settings' && <SettingsPage />}
       </main>
     </div>
   )

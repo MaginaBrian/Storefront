@@ -129,7 +129,9 @@ const ORDER_COLS = [
   ['method', 'Delivery method'],
 ]
 
-function OrdersList({ onChanged }) {
+const CHANNEL_LINK = { 'Draft Orders': 'drafts', 'Online Store': 'store', 'Agentic': 'agentic' }
+
+function OrdersList({ onChanged, onOpen }) {
   const [rows, reload, error] = useJson('/api/orders')
   const [summary, reloadSummary] = useJson('/api/orders/summary')
   const [query, setQuery] = useState('')
@@ -140,6 +142,15 @@ function OrdersList({ onChanged }) {
   const [colsOpen, setColsOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const headRef = useRef(null)
+
+  useEffect(() => {
+    if (!colsOpen) return
+    const close = e => {
+      if (!e.target.closest('.popover') && !e.target.closest('[aria-label="Choose columns"]')) setColsOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [colsOpen])
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -153,15 +164,16 @@ function OrdersList({ onChanged }) {
     }).sort((a, b) => sort === 'asc' ? a.created_at.localeCompare(b.created_at) : b.created_at.localeCompare(a.created_at))
   }, [rows, query, filter, sort])
 
-  const allPicked = shown.length > 0 && shown.every(r => picked.has(r.id))
+  const pickedShown = shown.filter(r => picked.has(r.id)).length
+  const allPicked = shown.length > 0 && pickedShown === shown.length
   useEffect(() => {
-    if (headRef.current) headRef.current.indeterminate = picked.size > 0 && !allPicked
-  }, [picked, allPicked])
+    if (headRef.current) headRef.current.indeterminate = pickedShown > 0 && !allPicked
+  }, [pickedShown, allPicked])
 
   const exportRows = () => csv([
     ['Order', 'Date', 'Customer', 'Channel', 'Total', 'Payment', 'Fulfillment', 'Items', 'Delivery method'],
     ...shown.map(r => [r.id, formatWhen(r.created_at), r.customer, r.channel, money(r.total), r.payment, r.fulfillment, r.items, r.delivery_method]),
-  ])
+  ], 'orders.csv')
 
   const saved = () => { reload(); reloadSummary(); onChanged() }
   const metrics = summary || { orders: 0, items: 0, reversals: 0, fulfilled: 0, delivered: 0 }
@@ -177,7 +189,7 @@ function OrdersList({ onChanged }) {
       </div>
       <section className="metrics" aria-label="Today">
         <div className="metric period"><span>Today</span></div>
-        {[['Orders', metrics.orders], ['Items ordered', metrics.items.toLocaleString()], ['Sales reversals', money(metrics.reversals)], ['Orders fulfilled', metrics.fulfilled], ['Orders delivered', metrics.delivered]].map(([k, v]) => (
+        {[['Orders', metrics.orders], ['Items ordered', metrics.items.toLocaleString()], ['Sales reversals', metrics.reversals ? money(metrics.reversals) : 'KES 0'], ['Orders fulfilled', metrics.fulfilled], ['Orders delivered', metrics.delivered]].map(([k, v]) => (
           <div className="metric" key={k}><span>{k}</span><strong>{v}</strong><i className="tick" /></div>
         ))}
       </section>
@@ -230,9 +242,9 @@ function OrdersList({ onChanged }) {
                   })} /></td>
                   <td className="link">#{r.id}</td>
                   <td>{formatWhen(r.created_at)}</td>
-                  <td>{r.customer}</td>
+                  <td>{onOpen ? <button type="button" className="text-link" onClick={() => onOpen('customers')}>{r.customer}</button> : r.customer}</td>
                   {cols.fulfill && <td className="muted">{r.fulfill_by || '—'}</td>}
-                  {cols.channel && <td>{r.channel}</td>}
+                  {cols.channel && <td>{onOpen && CHANNEL_LINK[r.channel] ? <button type="button" className="text-link" onClick={() => onOpen(CHANNEL_LINK[r.channel])}>{r.channel}</button> : r.channel}</td>}
                   <td>{money(r.total)}</td>
                   {cols.payment && <td>{r.payment === 'paid' ? <Tag kind="quiet">Paid</Tag> : <Tag kind="pending">Payment pending</Tag>}</td>}
                   {cols.fulfillment && <td>{r.fulfillment === 'fulfilled' ? <Tag kind="quiet">Fulfilled</Tag> : <Tag kind="wait">Unfulfilled</Tag>}</td>}
@@ -251,7 +263,7 @@ function OrdersList({ onChanged }) {
   )
 }
 
-function DraftsList() {
+function DraftsList({ onOpen }) {
   const [rows, reload, error] = useJson('/api/drafts')
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
@@ -269,10 +281,11 @@ function DraftsList() {
     }).sort((a, b) => sort === 'asc' ? a.created_at.localeCompare(b.created_at) : b.created_at.localeCompare(a.created_at))
   }, [rows, query, filter, sort])
 
-  const allPicked = shown.length > 0 && shown.every(r => picked.has(r.id))
+  const pickedShown = shown.filter(r => picked.has(r.id)).length
+  const allPicked = shown.length > 0 && pickedShown === shown.length
   useEffect(() => {
-    if (headRef.current) headRef.current.indeterminate = picked.size > 0 && !allPicked
-  }, [picked, allPicked])
+    if (headRef.current) headRef.current.indeterminate = pickedShown > 0 && !allPicked
+  }, [pickedShown, allPicked])
 
   return (
     <>
@@ -282,7 +295,7 @@ function DraftsList() {
           <button type="button" className="ghost" onClick={() => csv([
             ['Draft order', 'PO number', 'Date', 'Customer', 'Status', 'Total'],
             ...shown.map(r => [r.id, r.po || '', formatWhen(r.created_at), r.customer, r.status, money(r.total)]),
-          ])}>Export</button>
+          ], 'drafts.csv')}>Export</button>
           <button type="button" className="solid" onClick={() => setCreating(true)}>Create order</button>
         </div>
       </div>
@@ -321,7 +334,7 @@ function DraftsList() {
                   <td className="link">#{r.id}</td>
                   <td>{r.po ? <FileText size={15} aria-label="PO note" /> : ''}</td>
                   <td>{formatWhen(r.created_at)}</td>
-                  <td>{r.customer}</td>
+                  <td>{onOpen ? <button type="button" className="text-link" onClick={() => onOpen('customers')}>{r.customer}</button> : r.customer}</td>
                   <td><Tag kind={r.status === 'open' ? 'open' : 'quiet'}>{r.status === 'open' ? 'Open' : 'Completed'}</Tag></td>
                   <td>{money(r.total)}</td>
                 </tr>
@@ -393,8 +406,8 @@ function CartMark() {
   )
 }
 
-export default function OrdersSection({ view, onChanged }) {
-  if (view === 'drafts') return <DraftsList />
+export default function OrdersSection({ view, onChanged, onOpen }) {
+  if (view === 'drafts') return <DraftsList onOpen={onOpen} />
   if (view === 'checkouts') return <Checkouts />
-  return <OrdersList onChanged={onChanged} />
+  return <OrdersList onChanged={onChanged} onOpen={onOpen} />
 }
