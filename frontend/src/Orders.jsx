@@ -58,8 +58,8 @@ function Modal({ title, onClose, children }) {
   )
 }
 
-function OrderForm({ mode, onClose, onSaved }) {
-  const [customer, setCustomer] = useState('')
+function OrderForm({ mode, onClose, onSaved, initialCustomer = '' }) {
+  const [customer, setCustomer] = useState(initialCustomer)
   const [total, setTotal] = useState('')
   const [items, setItems] = useState('1')
   const [po, setPo] = useState('')
@@ -83,7 +83,7 @@ function OrderForm({ mode, onClose, onSaved }) {
       body: JSON.stringify(body),
     }).then(async r => {
       if (!r.ok) throw new Error((await r.json()).error || 'Could not save')
-      onSaved()
+      onSaved(await r.json())
       onClose()
     }).catch(err => { setError(err.message); setBusy(false) })
   }
@@ -129,9 +129,7 @@ const ORDER_COLS = [
   ['method', 'Delivery method'],
 ]
 
-const CHANNEL_LINK = { 'Draft Orders': 'drafts', 'Online Store': 'store', 'Agentic': 'agentic' }
-
-function OrdersList({ onChanged, onOpen }) {
+function OrdersList({ onChanged, onOpen, focus = {} }) {
   const [rows, reload, error] = useJson('/api/orders')
   const [summary, reloadSummary] = useJson('/api/orders/summary')
   const [query, setQuery] = useState('')
@@ -159,10 +157,12 @@ function OrdersList({ onChanged, onOpen }) {
       if (filter === 'paid' && r.payment !== 'paid') return false
       if (filter === 'unfulfilled' && r.fulfillment !== 'unfulfilled') return false
       if (filter === 'fulfilled' && r.fulfillment !== 'fulfilled') return false
+      if (focus.channel && r.channel !== focus.channel) return false
+      if (focus.customer && r.customer !== focus.customer) return false
       if (!q) return true
       return [r.id, r.customer, r.channel, r.delivery_method].join(' ').toLowerCase().includes(q)
     }).sort((a, b) => sort === 'asc' ? a.created_at.localeCompare(b.created_at) : b.created_at.localeCompare(a.created_at))
-  }, [rows, query, filter, sort])
+  }, [rows, query, filter, sort, focus.channel, focus.customer])
 
   const pickedShown = shown.filter(r => picked.has(r.id)).length
   const allPicked = shown.length > 0 && pickedShown === shown.length
@@ -175,8 +175,29 @@ function OrdersList({ onChanged, onOpen }) {
     ...shown.map(r => [r.id, formatWhen(r.created_at), r.customer, r.channel, money(r.total), r.payment, r.fulfillment, r.items, r.delivery_method]),
   ], 'orders.csv')
 
-  const saved = () => { reload(); reloadSummary(); onChanged() }
+  const saved = created => {
+    reload(); reloadSummary(); onChanged()
+    if (created?.id) onOpen('orders', { order: created.id })
+  }
+  const selected = (rows || []).find(r => String(r.id) === String(focus.order))
+  const [related, setRelated] = useState(null)
+  const [channels, setChannels] = useState([])
+  useEffect(() => {
+    if (!selected?.customer) { setRelated(null); return }
+    fetch(`/api/profile?customer=${encodeURIComponent(selected.customer)}`).then(r => r.json()).then(setRelated)
+  }, [selected?.id, selected?.customer])
+  useEffect(() => {
+    if (!focus.channel) return
+    fetch('/api/analytics').then(r => r.json()).then(d => setChannels(d.channels || []))
+  }, [focus.channel])
+  useEffect(() => {
+    document.querySelector('tr.picked')?.scrollIntoView({ block: 'nearest' })
+  }, [focus.order])
+  const fromDraft = related?.drafts?.find(d => String(d.order_id) === String(selected?.id))
+  const channelStat = channels.find(c => c.name === focus.channel)
   const metrics = summary || { orders: 0, items: 0, reversals: 0, fulfilled: 0, delivered: 0 }
+  const emptyNote = focus.channel ? `No recorded orders for ${focus.channel} yet.`
+    : focus.customer ? `No orders for ${focus.customer}.` : 'No orders match this search.'
 
   return (
     <>
@@ -187,6 +208,36 @@ function OrdersList({ onChanged, onOpen }) {
           <button type="button" className="solid" onClick={() => setCreating(true)}>Create order</button>
         </div>
       </div>
+      {selected && (
+        <section className="handoff">
+          <div>
+            <h2>Order #{selected.id}</h2>
+            <p>{money(selected.total)} · {selected.items.toLocaleString()} items · {formatWhen(selected.created_at)}</p>
+            <p>{selected.payment === 'paid' ? 'Paid' : 'Payment pending'} · {selected.fulfillment} · {selected.delivery_method}</p>
+          </div>
+          <div className="handoff-links">
+            <button type="button" className="ghost" onClick={() => onOpen('customers', { customer: selected.customer })}>{selected.customer}</button>
+            <button type="button" className="ghost" onClick={() => onOpen('orders', { channel: selected.channel })}>{selected.channel}</button>
+            {fromDraft && <button type="button" className="ghost" onClick={() => onOpen('drafts', { draft: fromDraft.id })}>From draft #{fromDraft.id}</button>}
+            {related?.customer?.email && <span className="muted">{related.customer.email} · {related.customer.location}</span>}
+          </div>
+        </section>
+      )}
+      {focus.channel && (
+        <section className="handoff">
+          <div>
+            <h2>{focus.channel}</h2>
+            <p>{channelStat ? `${channelStat.orders.toLocaleString()} orders in this channel · KES ${channelStat.sales.toLocaleString()}` : 'Orders placed in this channel'}</p>
+          </div>
+          <button type="button" className="ghost" onClick={() => onOpen('orders')}>Show all orders</button>
+        </section>
+      )}
+      {focus.customer && !selected && (
+        <section className="handoff">
+          <div><h2>{focus.customer}</h2><p>Orders for this customer</p></div>
+          <button type="button" className="ghost" onClick={() => onOpen('customers', { customer: focus.customer })}>Customer profile</button>
+        </section>
+      )}
       <section className="metrics" aria-label="Today">
         <div className="metric period"><span>Today</span></div>
         {[['Orders', metrics.orders], ['Items ordered', metrics.items.toLocaleString()], ['Sales reversals', metrics.reversals ? money(metrics.reversals) : 'KES 0'], ['Orders fulfilled', metrics.fulfilled], ['Orders delivered', metrics.delivered]].map(([k, v]) => (
@@ -232,19 +283,19 @@ function OrdersList({ onChanged, onOpen }) {
             </thead>
             <tbody>
               {error && <tr><td colSpan={12} className="muted">{error}</td></tr>}
-              {!error && rows && shown.length === 0 && <tr><td colSpan={12} className="muted">No orders match this search.</td></tr>}
+              {!error && rows && shown.length === 0 && <tr><td colSpan={12} className="muted">{emptyNote}</td></tr>}
               {shown.map(r => (
-                <tr key={r.id}>
+                <tr key={r.id} className={String(r.id) === String(focus.order) ? 'picked' : ''}>
                   <td className="check"><input type="checkbox" aria-label={`Select order ${r.id}`} checked={picked.has(r.id)} onChange={() => setPicked(prev => {
                     const next = new Set(prev)
                     next.has(r.id) ? next.delete(r.id) : next.add(r.id)
                     return next
                   })} /></td>
-                  <td className="link">#{r.id}</td>
+                  <td><button type="button" className="link text-link" onClick={() => onOpen('orders', { order: r.id })}>#{r.id}</button></td>
                   <td>{formatWhen(r.created_at)}</td>
-                  <td>{onOpen ? <button type="button" className="text-link" onClick={() => onOpen('customers')}>{r.customer}</button> : r.customer}</td>
+                  <td><button type="button" className="text-link" onClick={() => onOpen('customers', { customer: r.customer })}>{r.customer}</button></td>
                   {cols.fulfill && <td className="muted">{r.fulfill_by || '—'}</td>}
-                  {cols.channel && <td>{onOpen && CHANNEL_LINK[r.channel] ? <button type="button" className="text-link" onClick={() => onOpen(CHANNEL_LINK[r.channel])}>{r.channel}</button> : r.channel}</td>}
+                  {cols.channel && <td><button type="button" className="text-link" onClick={() => onOpen('orders', { channel: r.channel })}>{r.channel}</button></td>}
                   <td>{money(r.total)}</td>
                   {cols.payment && <td>{r.payment === 'paid' ? <Tag kind="quiet">Paid</Tag> : <Tag kind="pending">Payment pending</Tag>}</td>}
                   {cols.fulfillment && <td>{r.fulfillment === 'fulfilled' ? <Tag kind="quiet">Fulfilled</Tag> : <Tag kind="wait">Unfulfilled</Tag>}</td>}
@@ -258,12 +309,12 @@ function OrdersList({ onChanged, onOpen }) {
         </div>
       </div>
       <a className="learn" href="https://help.shopify.com/en/manual/orders" target="_blank" rel="noreferrer">Learn more about orders</a>
-      {creating && <OrderForm mode="order" onClose={() => setCreating(false)} onSaved={saved} />}
+      {creating && <OrderForm mode="order" initialCustomer={focus.customer || ''} onClose={() => setCreating(false)} onSaved={saved} />}
     </>
   )
 }
 
-function DraftsList({ onOpen }) {
+function DraftsList({ onOpen, focus = {} }) {
   const [rows, reload, error] = useJson('/api/drafts')
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
@@ -276,10 +327,11 @@ function DraftsList({ onOpen }) {
     const q = query.trim().toLowerCase()
     return (rows || []).filter(r => {
       if (filter !== 'all' && r.status !== filter) return false
+      if (focus.customer && r.customer !== focus.customer) return false
       if (!q) return true
       return [r.id, r.customer, r.po].join(' ').toLowerCase().includes(q)
     }).sort((a, b) => sort === 'asc' ? a.created_at.localeCompare(b.created_at) : b.created_at.localeCompare(a.created_at))
-  }, [rows, query, filter, sort])
+  }, [rows, query, filter, sort, focus.customer])
 
   const pickedShown = shown.filter(r => picked.has(r.id)).length
   const allPicked = shown.length > 0 && pickedShown === shown.length
@@ -299,6 +351,18 @@ function DraftsList({ onOpen }) {
           <button type="button" className="solid" onClick={() => setCreating(true)}>Create order</button>
         </div>
       </div>
+      {(rows || []).filter(r => r.id === focus.draft).map(selected => (
+        <section className="handoff" key={selected.id}>
+          <div>
+            <h2>Draft #{selected.id}</h2>
+            <p>{money(selected.total)} · {formatWhen(selected.created_at)} · {selected.status}</p>
+          </div>
+          <div className="handoff-links">
+            <button type="button" className="ghost" onClick={() => onOpen('customers', { customer: selected.customer })}>{selected.customer}</button>
+            {selected.order_id && <button type="button" className="ghost" onClick={() => onOpen('orders', { order: selected.order_id })}>Opened as order #{selected.order_id}</button>}
+          </div>
+        </section>
+      ))}
       <div className="sheet">
         <div className="toolbar">
           <select aria-label="Filter drafts" value={filter} onChange={e => setFilter(e.target.value)}>
@@ -325,16 +389,16 @@ function DraftsList({ onOpen }) {
               {error && <tr><td colSpan={7} className="muted">{error}</td></tr>}
               {!error && rows && shown.length === 0 && <tr><td colSpan={7} className="muted">No drafts match this search.</td></tr>}
               {shown.map(r => (
-                <tr key={r.id}>
+                <tr key={r.id} className={r.id === focus.draft ? 'picked' : ''}>
                   <td className="check"><input type="checkbox" aria-label={`Select draft ${r.id}`} checked={picked.has(r.id)} onChange={() => setPicked(prev => {
                     const next = new Set(prev)
                     next.has(r.id) ? next.delete(r.id) : next.add(r.id)
                     return next
                   })} /></td>
-                  <td className="link">#{r.id}</td>
+                  <td><button type="button" className="link text-link" onClick={() => onOpen('drafts', { draft: r.id })}>#{r.id}</button></td>
                   <td>{r.po ? <FileText size={15} aria-label="PO note" /> : ''}</td>
                   <td>{formatWhen(r.created_at)}</td>
-                  <td>{onOpen ? <button type="button" className="text-link" onClick={() => onOpen('customers')}>{r.customer}</button> : r.customer}</td>
+                  <td><button type="button" className="text-link" onClick={() => onOpen('customers', { customer: r.customer })}>{r.customer}</button></td>
                   <td><Tag kind={r.status === 'open' ? 'open' : 'quiet'}>{r.status === 'open' ? 'Open' : 'Completed'}</Tag></td>
                   <td>{money(r.total)}</td>
                 </tr>
@@ -344,7 +408,7 @@ function DraftsList({ onOpen }) {
         </div>
       </div>
       <a className="learn" href="https://help.shopify.com/en/manual/orders/create-orders" target="_blank" rel="noreferrer">Learn more about creating draft orders</a>
-      {creating && <OrderForm mode="draft" onClose={() => setCreating(false)} onSaved={reload} />}
+      {creating && <OrderForm mode="draft" initialCustomer={focus.customer || ''} onClose={() => setCreating(false)} onSaved={created => { reload(); if (created?.id) onOpen('drafts', { draft: created.id }) }} />}
     </>
   )
 }
@@ -406,8 +470,8 @@ function CartMark() {
   )
 }
 
-export default function OrdersSection({ view, onChanged, onOpen }) {
-  if (view === 'drafts') return <DraftsList onOpen={onOpen} />
+export default function OrdersSection({ view, onChanged, onOpen, focus }) {
+  if (view === 'drafts') return <DraftsList onOpen={onOpen} focus={focus} />
   if (view === 'checkouts') return <Checkouts />
-  return <OrdersList onChanged={onChanged} onOpen={onOpen} />
+  return <OrdersList onChanged={onChanged} onOpen={onOpen} focus={focus} />
 }

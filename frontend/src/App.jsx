@@ -25,9 +25,12 @@ const SETTINGS = { id: 'settings', label: 'Settings', icon: Settings }
 
 const VIEWS = new Set([...NAV, ...CHANNELS, SETTINGS].map(n => n.id).concat(['drafts', 'checkouts']))
 
-function readView() {
-  const id = location.hash.replace(/^#\/?/, '')
-  return VIEWS.has(id) ? id : 'home'
+function readRoute() {
+  const [path, qs = ''] = location.hash.replace(/^#\/?/, '').split('?')
+  return {
+    view: VIEWS.has(path) ? path : 'home',
+    focus: Object.fromEntries(new URLSearchParams(qs)),
+  }
 }
 
 function useApi(path) {
@@ -66,11 +69,11 @@ function Home({ onOpen }) {
     <>
       <div className="page-head">
         <h1 className="title">Sales performance</h1>
-        <button className="cta" onClick={() => onOpen('products', 'add')}><Plus size={15} /> Add product</button>
+        <button className="cta" onClick={() => onOpen('products', { add: '1' })}><Plus size={15} /> Add product</button>
       </div>
       <section className="kpis">
         {d.kpis.map(k => (
-          <button type="button" className="card kpi" key={k.label} onClick={() => onOpen(k.label === 'Orders' ? 'orders' : k.label === 'New customers' ? 'customers' : k.label === 'Low stock' ? 'products' : 'analytics')}>
+          <button type="button" className="card kpi" key={k.label} onClick={() => onOpen(k.label === 'Orders' ? 'orders' : k.label === 'New customers' ? 'customers' : k.label === 'Low stock' ? 'products' : 'analytics', k.label === 'Low stock' ? { stock: 'low' } : undefined)}>
             <div className="kpi-top"><span>{k.label}</span><i style={{ background: TONES[k.tone][0], color: TONES[k.tone][1] }} /></div>
             <div className="kpi-val"><strong>{k.value}</strong><em className={k.good ? 'up' : 'down'}>{k.note}</em></div>
           </button>
@@ -84,7 +87,7 @@ function Home({ onOpen }) {
             <ul>
               {d.channels.map((c, i) => (
                 <li key={c.name}>
-                  <button type="button" className="channel-hit" onClick={() => onOpen(c.view)}>
+                  <button type="button" className="channel-hit" onClick={() => onOpen('orders', { channel: c.name })}>
                   <b style={{ background: SHADES[i] }} />
                   <div><span>{c.name}</span><strong>KES {c.sales.toLocaleString()}</strong></div>
                   <div className="r"><span>{c.orders} orders</span><em className={c.delta > 0 ? 'up' : 'down'}>{Math.abs(c.delta)}%</em></div>
@@ -110,7 +113,10 @@ function Home({ onOpen }) {
             <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
             <tbody>
               {d.recent.map(r => (
-                <tr key={r.id} className="clickable" onClick={() => onOpen('orders')}><td>#{r.id}</td><td>{r.customer}</td><td>{r.date}</td><td>{r.amount}</td>
+                <tr key={r.id} className="clickable" onClick={() => onOpen('orders', { order: r.id })}>
+                  <td>#{r.id}</td>
+                  <td><button type="button" className="text-link" onClick={e => { e.stopPropagation(); onOpen('customers', { customer: r.customer }) }}>{r.customer}</button></td>
+                  <td>{r.date}</td><td>{r.amount}</td>
                   <td><span className={`pill ${r.status.toLowerCase()}`}>{r.status}</span></td></tr>
               ))}
             </tbody>
@@ -120,7 +126,7 @@ function Home({ onOpen }) {
           <h3>Top products</h3>
           <ul className="top">
             {d.top.map((t, i) => (
-              <li key={t.title}><button type="button" className="top-hit" onClick={() => onOpen('products')}><b style={{ background: SHADES[i % 4] }}>{t.title[0]}</b>
+              <li key={t.title}><button type="button" className="top-hit" onClick={() => onOpen('products', { product: t.title })}><b style={{ background: SHADES[i % 4] }}>{t.title[0]}</b>
                 <div><strong>{t.title}</strong><small>{t.sold} units sold</small></div><span>{t.sales}</span></button></li>
             ))}
           </ul>
@@ -131,13 +137,18 @@ function Home({ onOpen }) {
 }
 
 export default function App() {
-  const [view, setViewState] = useState(readView)
-  const [boot, setBoot] = useState(null)
+  const initial = readRoute()
+  const [view, setViewState] = useState(initial.view)
+  const [focus, setFocus] = useState(initial.focus)
   const [summary, reloadSummary] = useApi('/api/orders/summary')
   const [search, setSearch] = useState('')
   const [hits, setHits] = useState([])
   useEffect(() => {
-    const sync = () => setViewState(readView())
+    const sync = () => {
+      const route = readRoute()
+      setViewState(route.view)
+      setFocus(route.focus)
+    }
     window.addEventListener('hashchange', sync)
     return () => window.removeEventListener('hashchange', sync)
   }, [])
@@ -159,12 +170,18 @@ export default function App() {
     return () => clearTimeout(handle)
   }, [search])
   const setView = (id, extra) => {
-    setBoot(extra ? { id: extra, n: Date.now() } : null)
-    setSearch('')
-    setHits([])
-    const next = `#/${id}`
+    const params = new URLSearchParams()
+    if (extra && typeof extra === 'object') {
+      for (const [key, value] of Object.entries(extra)) {
+        if (value != null && value !== '') params.set(key, String(value))
+      }
+    }
+    const next = `#/${id}${params.toString() ? `?${params}` : ''}`
     if (location.hash !== next) location.hash = next
     setViewState(id)
+    setFocus({ ...Object.fromEntries(params), tick: Date.now() })
+    setSearch('')
+    setHits([])
   }
   const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }]
   const pageHits = search.trim().length < 2 ? [] : pages.filter(p => p.label.toLowerCase().includes(search.trim().toLowerCase()))
@@ -182,7 +199,10 @@ export default function App() {
           {(pageHits.length > 0 || hits.length > 0) && (
             <div className="search-results">
               {pageHits.map(p => <button type="button" key={p.id} onClick={() => setView(p.id)}>{p.label}</button>)}
-              {hits.map(h => <button type="button" key={h.label} onClick={() => setView(h.view)}>{h.label}</button>)}
+              {hits.map(h => {
+                const { view: dest, label, ...itemFocus } = h
+                return <button type="button" key={`${dest}-${label}`} onClick={() => setView(dest, itemFocus)}>{label}</button>
+              })}
             </div>
           )}
         </label>
@@ -207,16 +227,16 @@ export default function App() {
       </aside>
       <main>
         {view === 'home' && <Home onOpen={setView} />}
-        {ordersOpen && <OrdersSection view={view} onChanged={reloadSummary} onOpen={setView} />}
-        {view === 'products' && <Products boot={boot} />}
-        {view === 'customers' && <Customers />}
+        {ordersOpen && <OrdersSection view={view} onChanged={reloadSummary} onOpen={setView} focus={focus} />}
+        {view === 'products' && <Products focus={focus} onOpen={setView} />}
+        {view === 'customers' && <Customers focus={focus} onOpen={setView} />}
         {view === 'discounts' && <Discounts />}
         {view === 'content' && <Content />}
         {view === 'markets' && <Markets />}
-        {view === 'growth' && <Growth />}
+        {view === 'growth' && <Growth focus={focus} onOpen={setView} />}
         {view === 'analytics' && <Analytics onOpen={setView} />}
-        {view === 'store' && <StorePage />}
-        {view === 'agentic' && <AgenticPage />}
+        {view === 'store' && <StorePage onOpen={setView} />}
+        {view === 'agentic' && <AgenticPage onOpen={setView} />}
         {view === 'settings' && <SettingsPage />}
       </main>
     </div>

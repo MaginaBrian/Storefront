@@ -119,6 +119,40 @@ CREATE TABLE IF NOT EXISTS checkouts (
   total INTEGER NOT NULL,
   status TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS order_detail (
+  order_id INTEGER PRIMARY KEY,
+  confirmation TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS order_address (
+  order_id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  line TEXT NOT NULL,
+  city TEXT NOT NULL,
+  country TEXT NOT NULL,
+  billing_same INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS order_lines (
+  id INTEGER PRIMARY KEY,
+  order_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  price INTEGER NOT NULL,
+  qty INTEGER NOT NULL,
+  line_total INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS order_tags (
+  order_id INTEGER NOT NULL,
+  tag TEXT NOT NULL,
+  PRIMARY KEY (order_id, tag)
+);
+CREATE TABLE IF NOT EXISTS order_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  body TEXT NOT NULL,
+  draft_id TEXT
+);
 """
 
 
@@ -133,10 +167,19 @@ def query(sql, args=()):
         return [dict(row) for row in db.execute(sql, args)]
 
 
+def link_drafts(db):
+    for draft_id, order_id in (("D4", 1004), ("D2", 1002), ("D1", 1001)):
+        db.execute("UPDATE drafts SET order_id = ? WHERE id = ? AND order_id IS NULL", (order_id, draft_id))
+
+
 def init_db():
     with connect() as db:
         db.executescript(SCHEMA)
+        cols = [row[1] for row in db.execute("PRAGMA table_info(drafts)")]
+        if "order_id" not in cols:
+            db.execute("ALTER TABLE drafts ADD COLUMN order_id INTEGER")
         if db.execute("SELECT COUNT(*) FROM orders").fetchone()[0]:
+            link_drafts(db)
             return
         db.executemany(
             "INSERT INTO orders (id, created_at, customer, fulfill_by, channel, total, payment, fulfillment, items, delivery_status, delivery_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -242,6 +285,7 @@ def init_db():
         )
         db.execute("INSERT INTO store (id, domain, theme, status) VALUES (1, 'maison.co.ke', 'Dawn', 'Published')")
         db.execute("INSERT INTO agentic (id, conversations, resolved, handoff) VALUES (1, 128, 96, 12)")
+        link_drafts(db)
 
 
 init_db()
@@ -283,6 +327,17 @@ def orders_summary():
 @app.get("/api/orders")
 def orders():
     return jsonify(query("SELECT * FROM orders ORDER BY created_at DESC"))
+
+
+@app.get("/api/profile")
+def profile():
+    name = str(request.args.get("customer") or "").strip()
+    found = query("SELECT * FROM customers WHERE name = ?", (name,))
+    return jsonify(
+        customer=found[0] if found else None,
+        orders=query("SELECT id, created_at, total, payment, fulfillment, channel, items FROM orders WHERE customer = ? ORDER BY created_at DESC", (name,)),
+        drafts=query("SELECT id, created_at, total, status, order_id FROM drafts WHERE customer = ? ORDER BY created_at DESC", (name,)),
+    )
 
 
 @app.post("/api/orders")
@@ -480,13 +535,13 @@ def search():
     like = f"%{term}%"
     hits = []
     for row in query("SELECT id, customer FROM orders WHERE customer LIKE ? OR CAST(id AS TEXT) LIKE ? LIMIT 5", (like, like)):
-        hits.append({"view": "orders", "label": f"Order #{row['id']} · {row['customer']}"})
+        hits.append({"view": "orders", "label": f"Order #{row['id']} · {row['customer']}", "order": row["id"]})
     for row in query("SELECT id, customer FROM drafts WHERE customer LIKE ? OR id LIKE ? LIMIT 5", (like, like)):
-        hits.append({"view": "drafts", "label": f"Draft #{row['id']} · {row['customer']}"})
+        hits.append({"view": "drafts", "label": f"Draft #{row['id']} · {row['customer']}", "draft": row["id"]})
     for row in query("SELECT title FROM products WHERE title LIKE ? LIMIT 5", (like,)):
-        hits.append({"view": "products", "label": row["title"]})
+        hits.append({"view": "products", "label": row["title"], "product": row["title"]})
     for row in query("SELECT name FROM customers WHERE name LIKE ? OR email LIKE ? LIMIT 5", (like, like)):
-        hits.append({"view": "customers", "label": row["name"]})
+        hits.append({"view": "customers", "label": row["name"], "customer": row["name"]})
     return jsonify(hits)
 
 

@@ -10,7 +10,7 @@ function useApi(path) {
   return [data, load]
 }
 
-function Sheet({ title, action, columns, rows, empty }) {
+function Sheet({ title, action, columns, rows, empty, picked }) {
   return (
     <>
       <div className="page-head">
@@ -22,7 +22,7 @@ function Sheet({ title, action, columns, rows, empty }) {
           <thead><tr>{columns.map(c => <th key={c.key}>{c.label}</th>)}</tr></thead>
           <tbody>
             {rows?.map(row => (
-              <tr key={row.id}>
+              <tr key={row.id ?? row.title} className={picked && picked(row) ? 'picked' : ''}>
                 {columns.map(c => <td key={c.key}>{c.render ? c.render(row) : row[c.key]}</td>)}
               </tr>
             ))}
@@ -36,14 +36,17 @@ function Sheet({ title, action, columns, rows, empty }) {
 
 const Status = ({ value }) => <span className={`pill ${value}`}>{value}</span>
 
-export function Products({ boot }) {
+export function Products({ focus = {}, onOpen }) {
   const [rows, reload] = useApi('/api/products')
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [price, setPrice] = useState('')
   const [stock, setStock] = useState('')
   const [error, setError] = useState('')
-  useEffect(() => { if (boot?.id === 'add') setOpen(true) }, [boot])
+  useEffect(() => { if (focus.add === '1') setOpen(true) }, [focus.add, focus.tick])
+  const low = focus.stock === 'low'
+  const visible = rows?.filter(r => !low || r.stock <= 14)
+  const picked = rows?.find(r => r.title === focus.product)
 
   const save = e => {
     e.preventDefault()
@@ -63,20 +66,36 @@ export function Products({ boot }) {
 
   return (
     <>
+      {picked && (
+        <section className="handoff">
+          <div>
+            <h2>{picked.title}</h2>
+            <p>{money(picked.price)} · {picked.stock} in stock · {picked.sold} sold · {money(picked.price * picked.sold)} in sales</p>
+          </div>
+          {low && <button type="button" className="ghost" onClick={() => onOpen('products')}>Show all products</button>}
+        </section>
+      )}
+      {low && !picked && (
+        <section className="handoff">
+          <div><h2>Low stock</h2><p>Products with 14 or fewer left.</p></div>
+          <button type="button" className="ghost" onClick={() => onOpen('products')}>Show all products</button>
+        </section>
+      )}
       <Sheet
         title="Products"
-        rows={rows}
-        empty="No products yet."
+        rows={visible}
+        picked={r => r.title === focus.product}
+        empty={low ? 'Nothing is low on stock.' : 'No products yet.'}
         action={<button type="button" className="cta" onClick={() => setOpen(true)}><Plus size={15} /> Add product</button>}
         columns={[
-          { key: 'title', label: 'Product' },
+          { key: 'title', label: 'Product', render: r => <button type="button" className={`text-link ${r.title === focus.product ? 'on' : ''}`} onClick={() => onOpen('products', { product: r.title })}>{r.title}</button> },
           { key: 'price', label: 'Price', render: r => money(r.price) },
           { key: 'stock', label: 'In stock' },
           { key: 'sold', label: 'Sold' },
         ]}
       />
       {open && (
-        <div className="backdrop" onClick={() => setOpen(false)}>
+        <div className="backdrop" onClick={() => { setOpen(false); if (focus.add === '1') onOpen('products') }}>
           <form className="modal-form card pop" onClick={e => e.stopPropagation()} onSubmit={save}>
             <h2>Add product</h2>
             <label>Name<input autoFocus value={title} onChange={e => setTitle(e.target.value)} /></label>
@@ -84,7 +103,7 @@ export function Products({ boot }) {
             <label>In stock<input inputMode="numeric" value={stock} onChange={e => setStock(e.target.value)} /></label>
             {error && <p className="form-error">{error}</p>}
             <div className="modal-actions">
-              <button type="button" className="ghost" onClick={() => setOpen(false)}>Cancel</button>
+              <button type="button" className="ghost" onClick={() => { setOpen(false); if (focus.add === '1') onOpen('products') }}>Cancel</button>
               <button type="submit" className="solid">Save</button>
             </div>
           </form>
@@ -94,16 +113,80 @@ export function Products({ boot }) {
   )
 }
 
-export function Customers() {
+export function Customers({ focus = {}, onOpen }) {
+  const [profile, setProfile] = useState(null)
   const [rows] = useApi('/api/customers')
+  useEffect(() => {
+    if (!focus.customer) { setProfile(null); return }
+    let ignore = false
+    setProfile(null)
+    fetch(`/api/profile?customer=${encodeURIComponent(focus.customer)}`).then(r => r.json()).then(data => {
+      if (!ignore) setProfile(data)
+    })
+    return () => { ignore = true }
+  }, [focus.customer])
+  const person = profile?.customer
+  const detail = !profile
+    ? 'Loading profile…'
+    : person
+      ? `${person.email || 'No email'} · ${person.location} · ${person.orders} orders · ${money(person.spent)} spent`
+      : 'No saved profile for this name yet.'
   return (
-    <Sheet title="Customers" rows={rows} empty="No customers yet." columns={[
-      { key: 'name', label: 'Customer' },
-      { key: 'email', label: 'Email', render: r => r.email || '—' },
-      { key: 'location', label: 'Location' },
-      { key: 'orders', label: 'Orders' },
-      { key: 'spent', label: 'Spent', render: r => money(r.spent) },
-    ]} />
+    <>
+      {focus.customer && (
+        <section className="handoff">
+          <div>
+            <h2>{focus.customer}</h2>
+            <p>{detail}</p>
+          </div>
+          <button type="button" className="ghost" onClick={() => onOpen('orders', { customer: focus.customer })}>View orders</button>
+        </section>
+      )}
+      {profile?.orders?.length > 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <h3>Orders</h3>
+          <table>
+            <thead><tr><th>Order</th><th>Date</th><th>Total</th><th>Payment</th><th>Fulfillment</th></tr></thead>
+            <tbody>
+              {profile.orders.map(o => (
+                <tr key={o.id}>
+                  <td><button type="button" className="text-link" onClick={() => onOpen('orders', { order: o.id })}>#{o.id}</button></td>
+                  <td>{o.created_at.slice(0, 10)}</td>
+                  <td>{money(o.total)}</td>
+                  <td>{o.payment}</td>
+                  <td>{o.fulfillment}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {profile?.drafts?.length > 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <h3>Drafts</h3>
+          <table>
+            <thead><tr><th>Draft</th><th>Date</th><th>Total</th><th>Status</th></tr></thead>
+            <tbody>
+              {profile.drafts.map(d => (
+                <tr key={d.id}>
+                  <td><button type="button" className="text-link" onClick={() => onOpen('drafts', { draft: d.id })}>#{d.id}</button></td>
+                  <td>{d.created_at.slice(0, 10)}</td>
+                  <td>{money(d.total)}</td>
+                  <td>{d.status}{d.order_id ? ` · order #${d.order_id}` : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <Sheet title="Customers" rows={rows} empty="No customers yet." picked={r => r.name === focus.customer} columns={[
+        { key: 'name', label: 'Customer', render: r => <button type="button" className="text-link" onClick={() => onOpen('customers', { customer: r.name })}>{r.name}</button> },
+        { key: 'email', label: 'Email', render: r => r.email || '—' },
+        { key: 'location', label: 'Location' },
+        { key: 'orders', label: 'Orders' },
+        { key: 'spent', label: 'Spent', render: r => money(r.spent) },
+      ]} />
+    </>
   )
 }
 
@@ -142,12 +225,12 @@ export function Markets() {
   )
 }
 
-export function Growth() {
+export function Growth({ focus = {}, onOpen }) {
   const [rows] = useApi('/api/growth')
   return (
-    <Sheet title="Growth" rows={rows} empty="No campaigns yet." columns={[
+    <Sheet title="Growth" rows={rows} empty="No campaigns yet." picked={r => r.channel === focus.channel} columns={[
       { key: 'name', label: 'Campaign' },
-      { key: 'channel', label: 'Channel' },
+      { key: 'channel', label: 'Channel', render: r => <button type="button" className="text-link" onClick={() => onOpen('orders', { channel: r.channel })}>{r.channel}</button> },
       { key: 'status', label: 'Status', render: r => <Status value={r.status} /> },
       { key: 'reach', label: 'Reach', render: r => r.reach.toLocaleString() },
     ]} />
@@ -167,7 +250,7 @@ export function Analytics({ onOpen }) {
           <tbody>
             {data.channels.map(c => (
               <tr key={c.name}>
-                <td><button type="button" className="text-link" onClick={() => onOpen(c.view)}>{c.name}</button></td>
+                <td><button type="button" className="text-link" onClick={() => onOpen('orders', { channel: c.name })}>{c.name}</button></td>
                 <td>{c.orders.toLocaleString()}</td>
                 <td>KES {c.sales.toLocaleString()}</td>
                 <td><em className={c.delta > 0 ? 'up' : 'down'}>{Math.abs(c.delta)}%</em></td>
@@ -180,7 +263,32 @@ export function Analytics({ onOpen }) {
   )
 }
 
-export function StorePage() {
+function ChannelOrders({ channel, onOpen }) {
+  const [orders] = useApi('/api/orders')
+  const rows = orders?.filter(o => o.channel === channel) || []
+  return (
+    <div className="card">
+      <h3>Orders from {channel}</h3>
+      {rows.length === 0 && <p className="muted">No recorded orders for {channel} yet.</p>}
+      {rows.length > 0 && (
+        <table>
+          <thead><tr><th>Order</th><th>Customer</th><th>Total</th></tr></thead>
+          <tbody>
+            {rows.map(o => (
+              <tr key={o.id}>
+                <td><button type="button" className="text-link" onClick={() => onOpen('orders', { order: o.id })}>#{o.id}</button></td>
+                <td><button type="button" className="text-link" onClick={() => onOpen('customers', { customer: o.customer })}>{o.customer}</button></td>
+                <td>{money(o.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+export function StorePage({ onOpen }) {
   const [store] = useApi('/api/store')
   if (!store) return null
   return (
@@ -191,11 +299,12 @@ export function StorePage() {
           <div className="card kpi" key={k}><span className="muted">{k}</span><strong className="store-val">{v}</strong></div>
         ))}
       </section>
+      <ChannelOrders channel="Online Store" onOpen={onOpen} />
     </>
   )
 }
 
-export function AgenticPage() {
+export function AgenticPage({ onOpen }) {
   const [row] = useApi('/api/agentic')
   if (!row) return null
   const rate = Math.round((row.resolved / row.conversations) * 100)
@@ -207,6 +316,7 @@ export function AgenticPage() {
           <div className="card kpi" key={k}><span className="muted">{k}</span><strong className="store-val">{v}</strong></div>
         ))}
       </section>
+      <ChannelOrders channel="Agentic" onOpen={onOpen} />
     </>
   )
 }

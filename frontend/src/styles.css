@@ -153,6 +153,11 @@ tr:last-child td { border-bottom: 0; }
 
 @media (max-width: 1000px) { .row.two, .row.b { grid-template-columns: 1fr; } }
 .kpi { text-align: left; width: 100%; }
+tr.picked td { background: #eef0ff; }
+.handoff { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: #f7f7fb; }
+.handoff h2 { font-size: 18px; font-weight: 600; }
+.handoff p { color: var(--muted); }
+.handoff-links { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .clickable { cursor: pointer; }
 .clickable:hover td { background: #fafafd; }
 .text-link:hover { color: var(--indigo); }
