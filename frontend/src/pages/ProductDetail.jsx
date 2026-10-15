@@ -108,7 +108,7 @@ export default function ProductDetail({ productId, onOpen }) {
                   if (!confirmDelete) { setConfirmDelete(true); return }
                   act('delete')
                 }}><Trash2 size={14} /> {confirmDelete ? 'Confirm delete' : 'Delete product'}</button>
-                <button type="button" onClick={() => onOpen('growth')}><Mail size={14} /> Create email campaign</button>
+                <button type="button" onClick={() => onOpen('campaigns', { create: '1' })}><Mail size={14} /> Create email campaign</button>
               </div>
             )}
           </div>

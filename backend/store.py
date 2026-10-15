@@ -1,3 +1,5 @@
+import re
+import secrets
 from datetime import date
 
 from flask import Blueprint, jsonify, request
@@ -351,6 +353,51 @@ def update_market(market_id):
 @bp.get("/api/growth")
 def growth():
     return jsonify(query("SELECT * FROM campaigns ORDER BY id"))
+
+
+@bp.get("/api/campaigns")
+def marketing_campaigns():
+    return jsonify(query("SELECT id, name, status, created_at FROM marketing_campaigns ORDER BY created_at DESC"))
+
+
+@bp.get("/api/campaigns/<campaign_id>")
+def marketing_campaign(campaign_id):
+    rows = query("SELECT id, name, status, created_at FROM marketing_campaigns WHERE id = ?", (campaign_id,))
+    if not rows:
+        return jsonify(error="Campaign not found"), 404
+    return jsonify(rows[0])
+
+
+@bp.post("/api/campaigns")
+def create_marketing_campaign():
+    body = request.json or {}
+    name = str(body.get("name") or "").strip()
+    if not name:
+        return jsonify(error="Enter a campaign name."), 400
+    cid = str(body.get("id") or "").strip().lower()
+    if not re.fullmatch(r"[a-f0-9]{6}", cid):
+        cid = secrets.token_hex(3)
+    with connect() as db:
+        if db.execute("SELECT id FROM marketing_campaigns WHERE id = ?", (cid,)).fetchone():
+            return jsonify(error="That campaign id is already in use."), 409
+        db.execute(
+            "INSERT INTO marketing_campaigns (id, name, status, created_at) VALUES (?, ?, 'draft', ?)",
+            (cid, name[:140], date.today().isoformat()),
+        )
+    return jsonify(query("SELECT id, name, status, created_at FROM marketing_campaigns WHERE id = ?", (cid,))[0]), 201
+
+
+@bp.patch("/api/campaigns/<campaign_id>")
+def update_marketing_campaign(campaign_id):
+    found = query("SELECT * FROM marketing_campaigns WHERE id = ?", (campaign_id,))
+    if not found:
+        return jsonify(error="Campaign not found"), 404
+    name = str((request.json or {}).get("name") or "").strip()
+    if not name:
+        return jsonify(error="Enter a campaign name."), 400
+    with connect() as db:
+        db.execute("UPDATE marketing_campaigns SET name = ? WHERE id = ?", (name[:140], campaign_id))
+    return jsonify(query("SELECT id, name, status, created_at FROM marketing_campaigns WHERE id = ?", (campaign_id,))[0])
 
 
 @bp.get("/api/store")

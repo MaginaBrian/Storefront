@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS campaigns (
   status TEXT NOT NULL,
   reach INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS marketing_campaigns (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS channels (
   name TEXT PRIMARY KEY,
   orders INTEGER NOT NULL,

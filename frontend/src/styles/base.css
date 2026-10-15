@@ -112,6 +112,8 @@ html[data-theme="dark"] tr.picked td { background: var(--hover); }
 html[data-theme="dark"] .nav.on,
 html[data-theme="dark"] .sub.on,
 html[data-theme="dark"] .settings-rail > button.on { background: #2a3158; color: #e6e8ff; }
+html[data-theme="dark"] .metric,
+html[data-theme="dark"] .picker,
 html[data-theme="dark"] .example-card,
 html[data-theme="dark"] .card,
 html[data-theme="dark"] .detail-card,
@@ -193,4 +195,7 @@ html[data-theme="dark"] .settings-note { background: #222633; color: var(--muted
 html[data-theme="dark"] .map-card { background: linear-gradient(#1c1f2a, #1c1f2a) 0 0 / 16px 16px, #14161d; }
 html[data-theme="dark"] .d-big { fill: var(--text); }
 html[data-theme="dark"] .d-small { fill: var(--muted); }
+html[data-theme="dark"] .info-banner { background: #143044; color: #c9e7ff; }
+html[data-theme="dark"] .warn-banner { background: #3a3014; color: #f3d48a; }
+html[data-theme="dark"] .attr-card select { background: transparent; }
 

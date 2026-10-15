@@ -390,8 +390,8 @@ function Notifications({ onOpen }) {
           <span className="grow"><strong>Low stock</strong><small>Products with 14 or fewer left</small></span>
           <ChevronRight size={16} />
         </button>
-        <button type="button" className="settings-row" onClick={() => onOpen('growth')}>
-          <span className="grow"><strong>Customer messages</strong><small>WhatsApp restock, winback email, Instagram launch</small></span>
+        <button type="button" className="settings-row" onClick={() => onOpen('campaigns')}>
+          <span className="grow"><strong>Campaigns</strong><small>Track which channels bring sessions and sales</small></span>
           <ChevronRight size={16} />
         </button>
       </div>

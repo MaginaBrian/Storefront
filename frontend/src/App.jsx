@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, FileText, Globe, Inbox, Moon, Search, Sun, Tag, Users } from 'lucide-react'
+import { BarChart3, FileText, Globe, Inbox, Moon, Search, Sun, Tag, TrendingUp, Users } from 'lucide-react'
 import CatalogSection from './catalog/index.jsx'
 import Home from './home/Home.jsx'
 import { useApi } from './lib/api.js'
-import { ANALYTICS_VIEWS, CHANNELS, CONTENT_VIEWS, CUSTOMER_VIEWS, MARKET_VIEWS, NAV, PRODUCT_VIEWS, SETTINGS, readRoute } from './nav.js'
+import { ANALYTICS_VIEWS, CHANNELS, CONTENT_VIEWS, CUSTOMER_VIEWS, GROWTH_VIEWS, MARKET_VIEWS, NAV, PRODUCT_VIEWS, SETTINGS, readRoute } from './nav.js'
 import OrdersSection from './orders/index.jsx'
-import { AgenticPage, Analytics, BlogPosts, Catalogs, Companies, Content, Customers, Discounts, Files, Growth, LiveView, Markets, Menus, Metaobjects, Products, Reports, Rollouts, Segments, Settings as SettingsPage, StorePage } from './pages/index.js'
+import { AgenticPage, Analytics, Attribution, Autopilot, BlogPosts, Campaigns, Catalogs, Companies, Content, Customers, Discounts, Files, LiveView, Markets, Menus, Metaobjects, Products, Reports, Rollouts, Segments, Settings as SettingsPage, StorePage } from './pages/index.js'
 
 function ThemeToggle() {
   const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark')
@@ -71,7 +71,7 @@ export default function App() {
     setSearch('')
     setHits([])
   }
-  const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }, { id: 'collections', label: 'Collections' }, { id: 'inventory', label: 'Inventory' }, { id: 'purchase-orders', label: 'Purchase orders' }, { id: 'transfers', label: 'Transfers' }, { id: 'gift-cards', label: 'Gift cards' }, { id: 'segments', label: 'Segments' }, { id: 'companies', label: 'Companies' }, { id: 'metaobjects', label: 'Metaobjects' }, { id: 'files', label: 'Files' }, { id: 'menus', label: 'Menus' }, { id: 'blog-posts', label: 'Blog posts' }, { id: 'catalogs', label: 'Catalogs' }, { id: 'rollouts', label: 'Rollouts' }, { id: 'reports', label: 'Reports' }, { id: 'live-view', label: 'Live View' }]
+  const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }, { id: 'collections', label: 'Collections' }, { id: 'inventory', label: 'Inventory' }, { id: 'purchase-orders', label: 'Purchase orders' }, { id: 'transfers', label: 'Transfers' }, { id: 'gift-cards', label: 'Gift cards' }, { id: 'segments', label: 'Segments' }, { id: 'companies', label: 'Companies' }, { id: 'attribution', label: 'Attribution' }, { id: 'autopilot', label: 'Autopilot' }, { id: 'campaigns', label: 'Campaigns' }, { id: 'metaobjects', label: 'Metaobjects' }, { id: 'files', label: 'Files' }, { id: 'menus', label: 'Menus' }, { id: 'blog-posts', label: 'Blog posts' }, { id: 'catalogs', label: 'Catalogs' }, { id: 'rollouts', label: 'Rollouts' }, { id: 'reports', label: 'Reports' }, { id: 'live-view', label: 'Live View' }]
   const pageHits = search.trim().length < 2 ? [] : pages.filter(p => p.label.toLowerCase().includes(search.trim().toLowerCase()))
   const item = ({ id, label, icon: Icon }) => (
     <button key={id} className={`nav ${view === id ? 'on' : ''}`} onClick={() => setView(id)}>
@@ -84,6 +84,7 @@ export default function App() {
   const contentOpen = view === 'content' || CONTENT_VIEWS.includes(view)
   const marketsOpen = view === 'markets' || MARKET_VIEWS.includes(view)
   const analyticsOpen = view === 'analytics' || ANALYTICS_VIEWS.includes(view)
+  const growthOpen = view === 'growth' || GROWTH_VIEWS.includes(view)
   return (
     <div className="shell">
       <aside>
@@ -131,6 +132,17 @@ export default function App() {
             {customersOpen && <>
               <button className={`sub ${view === 'segments' ? 'on' : ''}`} onClick={() => setView('segments')}>Segments</button>
               <button className={`sub ${view === 'companies' ? 'on' : ''}`} onClick={() => setView('companies')}>Companies</button>
+            </>}
+          </div>
+        ) : entry.id === 'growth' ? (
+          <div key="growth" className="nest">
+            <button className={`nav ${view === 'growth' ? 'on' : ''}`} onClick={() => setView('attribution')}>
+              <TrendingUp size={17} strokeWidth={1.6} />Growth
+            </button>
+            {growthOpen && <>
+              <button className={`sub ${view === 'attribution' || view === 'growth' ? 'on' : ''}`} onClick={() => setView('attribution')}>Attribution</button>
+              <button className={`sub ${view === 'autopilot' ? 'on' : ''}`} onClick={() => setView('autopilot')}>Autopilot</button>
+              <button className={`sub ${view === 'campaigns' ? 'on' : ''}`} onClick={() => setView('campaigns')}>Campaigns</button>
             </>}
           </div>
         ) : entry.id === 'content' ? (
@@ -190,7 +202,9 @@ export default function App() {
         {view === 'markets' && <Markets focus={focus} onOpen={setView} />}
         {view === 'catalogs' && <Catalogs focus={focus} onOpen={setView} />}
         {view === 'rollouts' && <Rollouts />}
-        {view === 'growth' && <Growth focus={focus} onOpen={setView} />}
+        {(view === 'growth' || view === 'attribution') && <Attribution focus={focus} onOpen={setView} />}
+        {view === 'autopilot' && <Autopilot onOpen={setView} />}
+        {view === 'campaigns' && <Campaigns focus={focus} onOpen={setView} />}
         {view === 'analytics' && <Analytics onOpen={setView} />}
         {view === 'reports' && <Reports focus={focus} onOpen={setView} />}
         {view === 'live-view' && <LiveView onOpen={setView} />}
