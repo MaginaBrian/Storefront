@@ -4,16 +4,14 @@ import { Tag } from '../components/Tag.jsx'
 import { useJson } from '../lib/api.js'
 import { csv } from '../lib/csv.js'
 import { money } from '../lib/money.js'
-import OrderForm from './OrderForm.jsx'
 import { formatWhen } from './time.js'
 
 export default function DraftsList({ onOpen, focus = {} }) {
-  const [rows, reload, error] = useJson('/api/drafts')
+  const [rows, , error] = useJson('/api/drafts')
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const [sort, setSort] = useState('desc')
   const [picked, setPicked] = useState(() => new Set())
-  const [creating, setCreating] = useState(false)
   const headRef = useRef(null)
 
   const shown = useMemo(() => {
@@ -41,7 +39,7 @@ export default function DraftsList({ onOpen, focus = {} }) {
             ['Draft order', 'PO number', 'Date', 'Customer', 'Status', 'Total'],
             ...shown.map(r => [r.id, r.po || '', formatWhen(r.created_at), r.customer, r.status, money(r.total)]),
           ], 'drafts.csv')}>Export</button>
-          <button type="button" className="solid" onClick={() => setCreating(true)}>Create order</button>
+          <button type="button" className="solid" onClick={() => onOpen('drafts', { create: '1', customer: focus.customer || '' })}>Create order</button>
         </div>
       </div>
       <div className="sheet">
@@ -89,7 +87,6 @@ export default function DraftsList({ onOpen, focus = {} }) {
         </div>
       </div>
       <a className="learn" href="https://help.shopify.com/en/manual/orders/create-orders" target="_blank" rel="noreferrer">Learn more about creating draft orders</a>
-      {creating && <OrderForm mode="draft" initialCustomer={focus.customer || ''} onClose={() => setCreating(false)} onSaved={created => { reload(); if (created?.id) onOpen('drafts', { draft: created.id }) }} />}
     </>
   )
 }

@@ -89,6 +89,15 @@ def orders():
     return jsonify(query("SELECT * FROM orders ORDER BY created_at DESC"))
 
 
+@bp.get("/api/order-lines")
+def order_lines():
+    return jsonify(query(
+        """SELECT o.id AS order_id, o.created_at, o.customer, l.title, l.price, l.qty, l.line_total
+           FROM order_lines l JOIN orders o ON o.id = l.order_id
+           ORDER BY o.created_at DESC, l.id"""
+    ))
+
+
 @bp.get("/api/profile")
 def profile():
     name = str(request.args.get("customer") or "").strip()

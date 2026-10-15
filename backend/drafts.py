@@ -44,7 +44,7 @@ def load_draft(draft_id):
     else:
         lines = query("SELECT id, title, price, qty, line_total FROM draft_lines WHERE draft_id = ? ORDER BY id", (draft_id,))
         address = []
-    if not lines:
+    if not lines and draft["total"]:
         lines = [{"id": 0, "title": "Draft items", "price": draft["total"], "qty": 1, "line_total": draft["total"]}]
     if not address:
         person = query("SELECT location FROM customers WHERE name = ?", (draft["customer"],))
@@ -73,6 +73,12 @@ def load_draft(draft_id):
     people = query("SELECT email, location FROM customers WHERE name = ?", (draft["customer"],))
     count = query("SELECT COUNT(*) AS n FROM orders WHERE customer = ?", (draft["customer"],))[0]["n"]
     total = draft["total"]
+    discount = int(draft.get("discount") or 0)
+    shipping = int(draft.get("shipping") or 0)
+    subtotal = sum(line["line_total"] for line in lines) or max(total - shipping + discount, 0)
+    code = draft.get("currency") or "KES"
+    labels = {"KES": "Kenyan Shilling (KES)", "UGX": "Ugandan Shilling (UGX)", "TZS": "Tanzanian Shilling (TZS)"}
+    markets = {"KES": "Kenya", "UGX": "Uganda", "TZS": "Tanzania"}
     return {
         "draft": draft,
         "lines": lines,
@@ -83,16 +89,16 @@ def load_draft(draft_id):
             "location": people[0]["location"] if people else "",
             "orders": count,
         },
-        "market": "Kenya",
-        "currency": "Kenyan Shilling (KES)",
+        "market": markets.get(code, "Kenya"),
+        "currency": labels.get(code, labels["KES"]),
         "events": events,
         "summary": {
             "items": sum(line["qty"] for line in lines),
-            "subtotal": total,
-            "discount": 0,
-            "shipping": 0,
-            "tax": round(total * 16 / 116),
-            "tax_label": "16% VAT",
+            "subtotal": subtotal,
+            "discount": discount,
+            "shipping": shipping,
+            "tax": round(total * 16 / 116) if lines else 0,
+            "tax_label": "16% VAT" if lines else "Not calculated",
             "total": total,
             "due_note": "Payment due when order is fulfilled.",
         },
@@ -103,30 +109,79 @@ def drafts():
     return jsonify(query("SELECT * FROM drafts ORDER BY created_at DESC"))
 
 
+def money_fields(body):
+    try:
+        discount = int(body.get("discount") or 0)
+        shipping = int(body.get("shipping") or 0)
+    except (TypeError, ValueError):
+        return None
+    if discount < 0 or shipping < 0:
+        return None
+    lines = []
+    for item in body.get("lines") or []:
+        title = str(item.get("title") or "").strip()
+        if not title:
+            continue
+        try:
+            price = int(item.get("price") or 0)
+            qty = int(item.get("qty") or 1)
+        except (TypeError, ValueError):
+            return None
+        if price < 0 or qty < 1:
+            return None
+        lines.append({"title": title, "price": price, "qty": qty, "line_total": price * qty})
+    subtotal = sum(line["line_total"] for line in lines)
+    if "total" in body and not lines:
+        try:
+            total = int(body.get("total") or 0)
+        except (TypeError, ValueError):
+            return None
+    else:
+        total = max(subtotal - discount, 0) + shipping
+    if total < 0:
+        return None
+    currency = body.get("currency") if body.get("currency") in ("KES", "UGX", "TZS") else "KES"
+    return {
+        "lines": lines,
+        "discount": min(discount, subtotal) if lines else discount,
+        "shipping": shipping,
+        "total": total,
+        "note": str(body.get("note") or "").strip(),
+        "tags": str(body.get("tags") or "").strip(),
+        "currency": currency,
+    }
+
+
 @bp.post("/api/drafts")
 def create_draft():
     body = request.json or {}
     customer = str(body.get("customer") or "").strip()
     if not customer:
         return jsonify(error="Customer is required"), 400
-    try:
-        total = int(body.get("total") or 0)
-    except (TypeError, ValueError):
-        return jsonify(error="Total must be a number"), 400
-    if total < 0:
-        return jsonify(error="Total must be positive"), 400
+    fields = money_fields(body)
+    if not fields:
+        return jsonify(error="Enter a valid total"), 400
     created = datetime.now().replace(microsecond=0).isoformat()
     po = str(body.get("po") or "").strip() or None
     with connect() as db:
         draft_id = next_draft_id(db)
         db.execute(
-            "INSERT INTO drafts (id, po, created_at, customer, status, total) VALUES (?, ?, ?, ?, 'open', ?)",
-            (draft_id, po, created, customer, total),
+            """INSERT INTO drafts (id, po, created_at, customer, status, total, note, tags, discount, shipping, currency)
+               VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)""",
+            (draft_id, po, created, customer, fields["total"], fields["note"], fields["tags"], fields["discount"], fields["shipping"], fields["currency"]),
         )
-        db.execute(
-            "INSERT INTO draft_lines (draft_id, title, price, qty, line_total) VALUES (?, 'Draft items', ?, 1, ?)",
-            (draft_id, total, total),
-        )
+        if fields["lines"]:
+            copy_draft_lines(db, draft_id, fields["lines"])
+        elif fields["total"]:
+            db.execute(
+                "INSERT INTO draft_lines (draft_id, title, price, qty, line_total) VALUES (?, 'Draft items', ?, 1, ?)",
+                (draft_id, fields["total"], fields["total"]),
+            )
+        if fields["note"]:
+            db.execute(
+                "INSERT INTO draft_events (draft_id, created_at, kind, body) VALUES (?, ?, 'comment', ?)",
+                (draft_id, created, fields["note"]),
+            )
         row = dict(db.execute("SELECT * FROM drafts WHERE id = ?", (draft_id,)).fetchone())
     return jsonify(row), 201
 
@@ -156,20 +211,30 @@ def draft_action(draft_id):
                 "INSERT INTO draft_events (draft_id, created_at, kind, body) VALUES (?, ?, 'comment', ?)",
                 (draft_id, datetime.now().replace(microsecond=0).isoformat(), text),
             )
+        elif action == "invoice":
+            db.execute(
+                "INSERT INTO draft_events (draft_id, created_at, kind, body) VALUES (?, ?, 'event', ?)",
+                (draft_id, datetime.now().replace(microsecond=0).isoformat(), f"You sent an invoice to {draft['customer']} with a checkout link."),
+            )
         elif action == "duplicate":
             opened = next_draft_id(db)
             db.execute(
-                "INSERT INTO drafts (id, po, created_at, customer, status, total) VALUES (?, ?, ?, ?, 'open', ?)",
-                (opened, draft["po"], datetime.now().replace(microsecond=0).isoformat(), draft["customer"], draft["total"]),
+                """INSERT INTO drafts (id, po, created_at, customer, status, total, note, tags, discount, shipping, currency)
+                   VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)""",
+                (
+                    opened, draft["po"], datetime.now().replace(microsecond=0).isoformat(), draft["customer"], draft["total"],
+                    draft.get("note") or "", draft.get("tags") or "", draft.get("discount") or 0, draft.get("shipping") or 0, draft.get("currency") or "KES",
+                ),
             )
             copy_draft_lines(db, opened, draft_source_lines(db, draft))
         elif action == "order":
             created = datetime.now().replace(microsecond=0).isoformat()
             opened = (db.execute("SELECT MAX(id) FROM orders").fetchone()[0] or 1000) + 1
             items = sum(line["qty"] for line in draft_source_lines(db, draft)) or 1
+            payment = "paid" if body.get("payment") == "paid" else "pending"
             db.execute(
-                "INSERT INTO orders (id, created_at, customer, fulfill_by, channel, total, payment, fulfillment, items, delivery_status, delivery_method) VALUES (?, ?, ?, NULL, 'Draft Orders', ?, 'pending', 'unfulfilled', ?, NULL, 'Shipping')",
-                (opened, created, draft["customer"], draft["total"], items),
+                "INSERT INTO orders (id, created_at, customer, fulfill_by, channel, total, payment, fulfillment, items, delivery_status, delivery_method) VALUES (?, ?, ?, NULL, 'Draft Orders', ?, ?, 'unfulfilled', ?, NULL, 'Shipping')",
+                (opened, created, draft["customer"], draft["total"], payment, items),
             )
             existing = db.execute("SELECT id FROM customers WHERE name = ?", (draft["customer"],)).fetchone()
             if existing:
@@ -181,12 +246,23 @@ def draft_action(draft_id):
                 )
             row = dict(db.execute("SELECT * FROM orders WHERE id = ?", (opened,)).fetchone())
             attach_new_order(db, row)
+            if draft.get("note"):
+                db.execute("UPDATE order_detail SET note = ? WHERE order_id = ?", (draft["note"], opened))
+            for tag in [part.strip() for part in str(draft.get("tags") or "").split(",") if part.strip()]:
+                db.execute("INSERT OR IGNORE INTO order_tags (order_id, tag) VALUES (?, ?)", (opened, tag))
             db.execute("DELETE FROM order_lines WHERE order_id = ? AND title = 'Order items'", (opened,))
             for line in draft_source_lines(db, draft):
                 db.execute(
                     "INSERT INTO order_lines (order_id, title, price, qty, line_total) VALUES (?, ?, ?, ?, ?)",
                     (opened, line["title"], line["price"], line["qty"], line["line_total"]),
                 )
+            if payment == "paid":
+                add_paid = f"You marked draft #{draft_id} as paid."
+                db.execute(
+                    "INSERT INTO order_events (order_id, created_at, kind, body) VALUES (?, ?, 'event', ?)",
+                    (opened, created, add_paid),
+                )
+            db.execute("UPDATE drafts SET status = 'completed', order_id = ? WHERE id = ?", (opened, draft_id))
         else:
             return jsonify(error="Unknown action"), 400
     if action == "duplicate":

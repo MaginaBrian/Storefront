@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Columns3, Search } from 'lucide-react'
 import { Tag } from '../components/Tag.jsx'
 import { useJson } from '../lib/api.js'
-import { csv } from '../lib/csv.js'
 import { money } from '../lib/money.js'
+import ExportOrders from './ExportOrders.jsx'
 import OrderForm from './OrderForm.jsx'
 import { formatWhen } from './time.js'
 
@@ -27,6 +27,7 @@ export default function OrdersList({ onChanged, onOpen, focus = {} }) {
   const [cols, setCols] = useState(() => Object.fromEntries(ORDER_COLS.map(([k]) => [k, true])))
   const [colsOpen, setColsOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const headRef = useRef(null)
 
   useEffect(() => {
@@ -58,11 +59,6 @@ export default function OrdersList({ onChanged, onOpen, focus = {} }) {
     if (headRef.current) headRef.current.indeterminate = pickedShown > 0 && !allPicked
   }, [pickedShown, allPicked])
 
-  const exportRows = () => csv([
-    ['Order', 'Date', 'Customer', 'Channel', 'Total', 'Payment', 'Fulfillment', 'Items', 'Delivery method'],
-    ...shown.map(r => [r.id, formatWhen(r.created_at), r.customer, r.channel, money(r.total), r.payment, r.fulfillment, r.items, r.delivery_method]),
-  ], 'orders.csv')
-
   const saved = created => {
     reload(); reloadSummary(); onChanged()
     if (created?.id) onOpen('orders', { order: created.id })
@@ -92,7 +88,7 @@ export default function OrdersList({ onChanged, onOpen, focus = {} }) {
       <div className="orders-top">
         <h1>Orders</h1>
         <div className="orders-actions">
-          <button type="button" className="ghost" onClick={exportRows}>Export</button>
+          <button type="button" className="ghost" onClick={() => setExporting(true)}>Export</button>
           <button type="button" className="solid" onClick={() => setCreating(true)}>Create order</button>
         </div>
       </div>
@@ -198,6 +194,15 @@ export default function OrdersList({ onChanged, onOpen, focus = {} }) {
       </div>
       <a className="learn" href="https://help.shopify.com/en/manual/orders" target="_blank" rel="noreferrer">Learn more about orders</a>
       {creating && <OrderForm mode="order" initialCustomer={focus.customer || ''} onClose={() => setCreating(false)} onSaved={saved} />}
+      {exporting && (
+        <ExportOrders
+          rows={rows || []}
+          shown={shown}
+          picked={picked}
+          searching={Boolean(query.trim()) || filter !== 'all' || Boolean(focus.customer) || Boolean(focus.channel)}
+          onClose={() => setExporting(false)}
+        />
+      )}
     </>
   )
 }

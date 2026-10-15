@@ -31,13 +31,13 @@ export default function Checkouts() {
       <section className="panel empty-hero">
         <div>
           <h2>{title}</h2>
-          <p>See when customers put an item in their cart but don't check out. You can also email customers a link to their cart.</p>
+          <p>An abandoned checkout happens when a shopper starts checking out but leaves before completing their purchase. Review the checkout and any declined payment, then send a recovery email with a link to finish the order.</p>
         </div>
         <CartMark />
       </section>
       <section className="panel recover">
         <h2>Recover sales with your abandoned checkout email</h2>
-        <p>An automated email is already created for you. Take a moment to review the email and make any additional adjustments to the design, messaging, or recipient list.</p>
+        <p>Send the recovery email yourself, or leave the automation on. Customers get a link back to the checkout they left.</p>
         <button type="button" className="ghost" onClick={() => setReview(true)}>Review email</button>
       </section>
       <a className="learn" href="https://help.shopify.com/en/manual/orders/abandoned-checkouts" target="_blank" rel="noreferrer">Learn more about abandoned checkouts</a>

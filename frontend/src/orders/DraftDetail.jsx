@@ -85,6 +85,8 @@ export default function DraftDetail({ draftId, onOpen }) {
             {menu && (
               <div className="popover menu-pop">
                 <button type="button" onClick={() => { setMenu(false); window.print() }}>Print draft</button>
+                {draft.status === 'open' && <button type="button" onClick={() => { setMenu(false); act('invoice') }}>Send invoice</button>}
+                {draft.status === 'open' && <button type="button" onClick={() => { setMenu(false); act('order', { payment: 'paid' }).then(d => onOpen('orders', { order: d.order_id })) }}>Mark as paid</button>}
                 <button type="button" onClick={() => { setMenu(false); act('order').then(d => onOpen('orders', { order: d.order_id })) }}>Create order</button>
               </div>
             )}

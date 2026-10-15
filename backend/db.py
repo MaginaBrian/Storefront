@@ -344,6 +344,14 @@ def migrate(db):
     draft_cols = [row[1] for row in db.execute("PRAGMA table_info(drafts)")]
     if "order_id" not in draft_cols:
         db.execute("ALTER TABLE drafts ADD COLUMN order_id INTEGER")
+    for name, decl in (
+        ("note", "TEXT NOT NULL DEFAULT ''"),
+        ("tags", "TEXT NOT NULL DEFAULT ''"),
+        ("discount", "INTEGER NOT NULL DEFAULT 0"),
+        ("shipping", "INTEGER NOT NULL DEFAULT 0"),
+        ("currency", "TEXT NOT NULL DEFAULT 'KES'"),
+    ):
+        _add_col(db, "drafts", name, decl)
     product_cols = {row[1] for row in db.execute("PRAGMA table_info(products)")}
     for name, decl in (
         ("description", "TEXT NOT NULL DEFAULT ''"),
