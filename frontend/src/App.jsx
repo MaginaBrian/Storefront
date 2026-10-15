@@ -1,11 +1,28 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, FileText, Globe, Inbox, Search, Smartphone, Tag, Users } from 'lucide-react'
+import { BarChart3, FileText, Globe, Inbox, Moon, Search, Sun, Tag, Users } from 'lucide-react'
 import CatalogSection from './catalog/index.jsx'
 import Home from './home/Home.jsx'
 import { useApi } from './lib/api.js'
 import { ANALYTICS_VIEWS, CHANNELS, CONTENT_VIEWS, CUSTOMER_VIEWS, MARKET_VIEWS, NAV, PRODUCT_VIEWS, SETTINGS, readRoute } from './nav.js'
 import OrdersSection from './orders/index.jsx'
 import { AgenticPage, Analytics, BlogPosts, Catalogs, Companies, Content, Customers, Discounts, Files, Growth, LiveView, Markets, Menus, Metaobjects, Products, Reports, Rollouts, Segments, Settings as SettingsPage, StorePage } from './pages/index.js'
+
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark')
+  const toggle = () => {
+    const next = !dark
+    if (next) document.documentElement.dataset.theme = 'dark'
+    else delete document.documentElement.dataset.theme
+    localStorage.setItem('storefront-theme', next ? 'dark' : 'light')
+    setDark(next)
+  }
+  return (
+    <button type="button" className="nav" onClick={toggle}>
+      {dark ? <Sun size={17} strokeWidth={1.6} /> : <Moon size={17} strokeWidth={1.6} />}
+      {dark ? 'Light mode' : 'Dark mode'}
+    </button>
+  )
+}
 
 export default function App() {
   const initial = readRoute()
@@ -70,7 +87,7 @@ export default function App() {
   return (
     <div className="shell">
       <aside>
-        <button type="button" className="brand" onClick={() => setView('home')}>Maison</button>
+        <button type="button" className="brand" onClick={() => setView('home')}>Storefront</button>
         <label className="search"><Search size={15} /><input id="nav-search" placeholder="Search" value={search} onChange={e => setSearch(e.target.value)} /><kbd>Ctrl K</kbd>
           {(pageHits.length > 0 || hits.length > 0) && (
             <div className="search-results">
@@ -151,12 +168,10 @@ export default function App() {
         ) : item(entry))}</nav>
         <p className="group">Sales channels</p>
         <nav>{CHANNELS.map(item)}</nav>
-        <div className="promo">
-          <strong>Run your store anywhere</strong>
-          <p>Get order alerts, low-stock warnings and live sales on your phone.</p>
-          <button className="cta"><Smartphone size={14} /> Get the app</button>
+        <div className="foot">
+          <ThemeToggle />
+          {item(SETTINGS)}
         </div>
-        <div className="foot">{item(SETTINGS)}</div>
       </aside>
       <main>
         {view === 'home' && <Home onOpen={setView} />}
