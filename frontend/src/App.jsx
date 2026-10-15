@@ -193,7 +193,7 @@ export default function App() {
         {view === 'customers' && <Customers focus={focus} onOpen={setView} />}
         {view === 'segments' && <Segments onOpen={setView} />}
         {view === 'companies' && <Companies focus={focus} onOpen={setView} />}
-        {view === 'discounts' && <Discounts />}
+        {view === 'discounts' && <Discounts focus={focus} onOpen={setView} />}
         {view === 'content' && <Content focus={focus} />}
         {view === 'metaobjects' && <Metaobjects focus={focus} onOpen={setView} />}
         {view === 'files' && <Files />}

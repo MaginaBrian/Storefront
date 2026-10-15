@@ -1,3 +1,4 @@
+import json
 import re
 import secrets
 from datetime import date
@@ -149,28 +150,78 @@ def create_company():
     return jsonify(query("SELECT * FROM companies WHERE id = ?", (company_id,))[0]), 201
 
 
+DISCOUNT_KINDS = (
+    "Amount off products", "Buy X get Y", "Amount off order", "Free shipping",
+    "Percentage", "Fixed amount",
+)
+
+
+def discount_fields(body):
+    kind = str(body.get("kind") or "").strip()
+    if kind not in DISCOUNT_KINDS:
+        kind = "Amount off products"
+    method = "automatic" if body.get("method") == "automatic" else "code"
+    title = str(body.get("title") or "").strip()
+    code = title if method == "automatic" else str(body.get("code") or "").strip().upper()
+    value = str(body.get("value") or "").strip()
+    if kind == "Free shipping" and not value:
+        value = "Shipping"
+    config = body.get("config") if isinstance(body.get("config"), dict) else {}
+    if not code:
+        message = "Enter a title customers will see." if method == "automatic" else "Enter a discount code."
+        return None, message
+    if kind != "Free shipping" and not value:
+        return None, "Enter a discount value."
+    return {
+        "code": code[:40],
+        "kind": kind,
+        "value": value[:80],
+        "method": method,
+        "config": json.dumps(config),
+    }, None
+
+
 @bp.get("/api/discounts")
 def discounts():
     return jsonify(query("SELECT * FROM discounts ORDER BY id"))
 
 
+@bp.get("/api/discounts/<int:discount_id>")
+def discount(discount_id):
+    rows = query("SELECT * FROM discounts WHERE id = ?", (discount_id,))
+    if not rows:
+        return jsonify(error="Discount not found"), 404
+    return jsonify(rows[0])
+
+
 @bp.post("/api/discounts")
 def create_discount():
-    body = request.json or {}
-    code = str(body.get("code") or "").strip().upper()
-    kind = str(body.get("kind") or "Percentage").strip()
-    value = str(body.get("value") or "").strip()
-    if not code or not value:
-        return jsonify(error="Enter a code and a value."), 400
-    if kind not in ("Percentage", "Fixed amount", "Free shipping"):
-        kind = "Percentage"
+    fields, error = discount_fields(request.json or {})
+    if error:
+        return jsonify(error=error), 400
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO discounts (code, kind, value, status, uses) VALUES (?, ?, ?, 'active', 0)",
-            (code[:40], kind, value[:40]),
+            """INSERT INTO discounts (code, kind, value, status, uses, method, config)
+               VALUES (?, ?, ?, 'active', 0, ?, ?)""",
+            (fields["code"], fields["kind"], fields["value"], fields["method"], fields["config"]),
         )
         discount_id = cur.lastrowid
     return jsonify(query("SELECT * FROM discounts WHERE id = ?", (discount_id,))[0]), 201
+
+
+@bp.patch("/api/discounts/<int:discount_id>")
+def update_discount(discount_id):
+    if not query("SELECT id FROM discounts WHERE id = ?", (discount_id,)):
+        return jsonify(error="Discount not found"), 404
+    fields, error = discount_fields(request.json or {})
+    if error:
+        return jsonify(error=error), 400
+    with connect() as db:
+        db.execute(
+            "UPDATE discounts SET code = ?, kind = ?, value = ?, method = ?, config = ? WHERE id = ?",
+            (fields["code"], fields["kind"], fields["value"], fields["method"], fields["config"], discount_id),
+        )
+    return jsonify(query("SELECT * FROM discounts WHERE id = ?", (discount_id,))[0])
 
 
 @bp.get("/api/files")

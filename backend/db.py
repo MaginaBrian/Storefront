@@ -421,6 +421,8 @@ def migrate(db):
         ("tax_settings", "TEXT NOT NULL DEFAULT 'Collect tax'"),
     ):
         _add_col(db, "customers", name, decl)
+    _add_col(db, "discounts", "method", "TEXT NOT NULL DEFAULT 'code'")
+    _add_col(db, "discounts", "config", "TEXT NOT NULL DEFAULT '{}'")
 
 
 def init_db():

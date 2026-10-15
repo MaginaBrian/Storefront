@@ -204,7 +204,30 @@
 .picker button { text-align: left; padding: 8px 10px; }
 .picker button:hover { background: #f3f3f8; }
 .modal { margin: auto; border: 0; padding: 0; border-radius: 16px; width: min(440px, calc(100vw - 32px)); box-shadow: 0 24px 80px rgba(20, 10, 40, .28); }
-.modal:has(.export-body) { width: min(560px, calc(100vw - 32px)); }
+.modal:has(.export-body), .modal:has(.type-list) { width: min(560px, calc(100vw - 32px)); }
+.type-list { display: grid; }
+.type-choice { display: grid; grid-template-columns: 20px 1fr 16px; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.type-choice small { display: block; color: var(--muted); font-weight: 400; }
+.type-choice:hover { background: #f6f6fb; }
+.method-toggle { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: #ececf3; margin: 8px 0; }
+.method-toggle button { border-radius: 7px; padding: 6px 10px; }
+.method-toggle button.on { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.code-row { display: flex; align-items: center; gap: 10px; }
+.code-row input { flex: 1; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.browse-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+.discount-search { position: relative; display: grid; gap: 8px; }
+.discount-search input, .detail-card input:not([type="radio"]):not([type="checkbox"]), .detail-card select { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; color: var(--text); background: #fff; width: 100%; }
+.suffix-field { display: flex; align-items: center; gap: 8px; }
+.suffix-field input { flex: 1; }
+.schedule { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.combo { text-align: left; width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.detail-list { margin: 8px 0 0 16px; display: grid; gap: 4px; color: var(--muted); }
+.detail-card > label:not(.choice) { display: grid; gap: 6px; margin-top: 12px; }
+.detail-card h2 { margin-bottom: 8px; }
+.discount-search .picker { position: absolute; z-index: 2; top: 42px; left: 0; right: 0; }
+.browse-list { max-height: 280px; overflow: auto; }
+button.learn { border: 0; background: none; width: 100%; cursor: pointer; }
 .export-body { padding: 8px 18px 4px; display: grid; gap: 16px; }
 .export-body fieldset { border: 0; padding: 0; display: grid; gap: 6px; }
 .export-body legend { font-weight: 650; margin-bottom: 4px; }
