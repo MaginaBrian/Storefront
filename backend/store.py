@@ -16,11 +16,61 @@ def customers():
     return jsonify(query("SELECT * FROM customers ORDER BY spent DESC"))
 
 
+def customer_name(body):
+    first = str(body.get("first_name") or "").strip()
+    last = str(body.get("last_name") or "").strip()
+    return str(body.get("name") or f"{first} {last}").strip()
+
+
+def insert_customer(db, body):
+    name = customer_name(body)
+    if not name:
+        return None
+    email = str(body.get("email") or "").strip()
+    location = str(body.get("location") or body.get("city") or "Nairobi").strip() or "Nairobi"
+    cur = db.execute(
+        """INSERT INTO customers (
+            name, email, location, orders, spent, phone, language, subscribed, sms, whatsapp, note, tags, address, tax_settings
+        ) VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            name[:120],
+            email,
+            location,
+            str(body.get("phone") or "").strip(),
+            str(body.get("language") or "English").strip() or "English",
+            1 if body.get("email_marketing") else 0,
+            1 if body.get("sms") else 0,
+            1 if body.get("whatsapp") else 0,
+            str(body.get("note") or "").strip(),
+            str(body.get("tags") or "").strip(),
+            str(body.get("address") or "").strip(),
+            body.get("tax_settings") if body.get("tax_settings") in ("Collect tax", "Don't collect tax") else "Collect tax",
+        ),
+    )
+    return dict(db.execute("SELECT * FROM customers WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+@bp.post("/api/customers")
+def create_customer():
+    body = request.json or {}
+    rows = body.get("customers") if isinstance(body.get("customers"), list) else [body]
+    saved = []
+    with connect() as db:
+        for item in rows:
+            row = insert_customer(db, item or {})
+            if row:
+                saved.append(row)
+    if not saved:
+        return jsonify(error="Enter a customer name."), 400
+    return jsonify(saved[0] if len(saved) == 1 and "customers" not in body else saved), 201
+
+
 def customers_for(rule):
     where = {
         "purchased": "orders >= 1",
         "repeat": "orders > 1",
         "never": "orders = 0",
+        "subscribers": "subscribed = 1",
     }.get(rule)
     if not where:
         return []
@@ -48,7 +98,7 @@ def create_segment():
         return jsonify(error="Enter a segment name."), 400
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO segments (name, query, percent, last_activity, created_by) VALUES (?, 'custom', 0, ?, 'Maison')",
+            "INSERT INTO segments (name, query, percent, last_activity, created_by) VALUES (?, 'custom', 0, ?, 'Storefront')",
             (name[:120], date.today().isoformat()),
         )
         segment_id = cur.lastrowid

@@ -195,13 +195,27 @@ def create_collection():
     title = str(body.get("title") or "").strip()
     if not title:
         return jsonify(error="Title is required"), 400
-    product = str(body.get("product") or "").strip()
+    conditions = str(body.get("conditions") or "").strip() or None
+    names = []
+    for item in body.get("products") or []:
+        name = str(item or "").strip()
+        if name and name not in names:
+            names.append(name)
+    single = str(body.get("product") or "").strip()
+    if single and single not in names:
+        names.append(single)
     with connect() as db:
-        cur = db.execute("INSERT INTO collections (title, conditions) VALUES (?, NULL)", (title,))
+        cur = db.execute("INSERT INTO collections (title, conditions) VALUES (?, ?)", (title, conditions))
         collection_id = cur.lastrowid
-        if product:
-            db.execute("INSERT INTO collection_products (collection_id, product) VALUES (?, ?)", (collection_id, product))
-    return jsonify(collection_rows()), 201
+        db.executemany(
+            "INSERT OR IGNORE INTO collection_products (collection_id, product) VALUES (?, ?)",
+            [(collection_id, name) for name in names],
+        )
+        db.execute(
+            "INSERT OR IGNORE INTO collection_channels (collection_id, channel) VALUES (?, 'Online Store')",
+            (collection_id,),
+        )
+    return jsonify(id=collection_id), 201
 
 
 @bp.get("/api/inventory")

@@ -403,6 +403,18 @@ def migrate(db):
         ("expires", "TEXT NOT NULL DEFAULT ''"),
     ):
         _add_col(db, "gift_cards", name, decl)
+    for name, decl in (
+        ("phone", "TEXT NOT NULL DEFAULT ''"),
+        ("language", "TEXT NOT NULL DEFAULT 'English'"),
+        ("subscribed", "INTEGER NOT NULL DEFAULT 1"),
+        ("sms", "INTEGER NOT NULL DEFAULT 0"),
+        ("whatsapp", "INTEGER NOT NULL DEFAULT 0"),
+        ("note", "TEXT NOT NULL DEFAULT ''"),
+        ("tags", "TEXT NOT NULL DEFAULT ''"),
+        ("address", "TEXT NOT NULL DEFAULT ''"),
+        ("tax_settings", "TEXT NOT NULL DEFAULT 'Collect tax'"),
+    ):
+        _add_col(db, "customers", name, decl)
 
 
 def init_db():

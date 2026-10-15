@@ -114,11 +114,11 @@ CATALOG_ITEMS = [
 ]
 
 SEGMENTS = [
-    (1, "Customers who have purchased at least once", "purchased", 100, "2026-09-27", "Shopify"),
-    (2, "Email subscribers", "subscribers", 0, "2026-09-27", "Shopify"),
-    (3, "Abandoned checkouts in the last 30 days", "abandoned", 0, "2026-09-27", "Shopify"),
-    (4, "Customers who have purchased more than once", "repeat", 0, "2026-09-27", "Shopify"),
-    (5, "Customers who haven't purchased", "never", 0, "2026-09-27", "Shopify"),
+    (1, "Customers who have purchased at least once", "purchased", 100, "2026-09-27", "Storefront"),
+    (2, "Email subscribers", "subscribers", 0, "2026-09-27", "Storefront"),
+    (3, "Abandoned checkouts in the last 30 days", "abandoned", 0, "2026-09-27", "Storefront"),
+    (4, "Customers who have purchased more than once", "repeat", 0, "2026-09-27", "Storefront"),
+    (5, "Customers who haven't purchased", "never", 0, "2026-09-27", "Storefront"),
 ]
 
 COLORS = [

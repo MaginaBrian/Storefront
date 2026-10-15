@@ -1,17 +1,164 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Image, Plus } from 'lucide-react'
 import { useJson } from '../lib/api.js'
-import { FormModal, Toolbar } from './ui.jsx'
+import { Toolbar } from './ui.jsx'
+
+const EXAMPLES = [
+  { id: 'men', title: "Men's clothes", group: 'intent', rule: 'Audience is Men', blurb: 'Clothes for men, women, or children.' },
+  { id: 'women', title: "Women's clothes", group: 'intent', rule: 'Audience is Women', blurb: 'Clothes for men, women, or children.' },
+  { id: 'children', title: "Children's clothes", group: 'intent', rule: 'Audience is Children', blurb: 'Clothes for men, women, or children.' },
+  { id: 'type', title: 'Shirts', group: 'category', rule: 'Category is Shirts', blurb: 'Items of a certain type, such as lamps, cushions, or rugs.' },
+  { id: 'sale', title: 'On sale', group: 'theme', rule: 'On sale', blurb: 'Items that are on sale.' },
+  { id: 'color', title: 'Black', group: 'theme', rule: 'Color is Black', blurb: 'Items in a certain size or color.' },
+  { id: 'season', title: 'Holiday', group: 'theme', rule: 'Season is Holiday', blurb: 'Seasonal products, such as holiday cards and decorations.' },
+  { id: 'variant', title: 'Red', group: 'theme', rule: 'Variant color is Red', blurb: "Variant collections, such as only red products for Valentine's Day." },
+]
+
+function matchesRule(rule, product, variants) {
+  if (rule.startsWith('Category is ')) return product.category === rule.slice('Category is '.length)
+  if (rule.startsWith('Color is ')) {
+    const color = rule.slice(9).toLowerCase()
+    return (product.color || '').toLowerCase() === color || variants.some(item => item.product === product.title && item.variant.toLowerCase() === color)
+  }
+  if (rule.startsWith('Variant color is ')) {
+    const color = rule.slice(17).toLowerCase()
+    return variants.some(item => item.product === product.title && item.variant.toLowerCase() === color)
+  }
+  return false
+}
+
+function CreateCollection({ onOpen, exampleId }) {
+  const [products] = useJson('/api/products')
+  const [inventory] = useJson('/api/inventory')
+  const starter = EXAMPLES.find(item => item.id === exampleId) || null
+  const [title, setTitle] = useState(starter?.title || '')
+  const [group, setGroup] = useState(starter?.group || 'category')
+  const [rule, setRule] = useState(starter?.rule || 'Category is Shirts')
+  const [picked, setPicked] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const catalog = products || []
+  const variants = inventory || []
+  const categories = [...new Set(catalog.map(product => product.category).filter(Boolean))]
+  const colors = [...new Set([
+    ...catalog.map(product => product.color).filter(Boolean),
+    ...variants.map(item => item.variant).filter(Boolean),
+  ])]
+  const suggested = useMemo(
+    () => catalog.filter(product => matchesRule(rule, product, variants)).map(product => product.title),
+    [catalog, variants, rule],
+  )
+  const chosen = picked || suggested
+
+  const setGroupRule = next => {
+    setGroup(next)
+    setPicked(null)
+    if (next === 'category') setRule(`Category is ${categories[0] || 'Shirts'}`)
+    if (next === 'theme') setRule(colors[0] ? `Color is ${colors[0]}` : 'On sale')
+    if (next === 'intent') setRule('Audience is Men')
+  }
+  const toggle = name => {
+    const current = new Set(chosen)
+    current.has(name) ? current.delete(name) : current.add(name)
+    setPicked([...current])
+  }
+  const save = event => {
+    event.preventDefault()
+    if (!title.trim()) { setError('Enter a collection name.'); return }
+    setBusy(true)
+    fetch('/api/collections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title.trim(), conditions: rule, products: chosen }),
+    }).then(async response => {
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || 'Could not save')
+      onOpen('collections', { collection: body.id })
+    }).catch(err => { setError(err.message); setBusy(false) })
+  }
+
+  return (
+    <form className="order-page" onSubmit={save}>
+      <div className="crumb">
+        <button type="button" className="text-link" onClick={() => onOpen('collections')}>Collections</button>
+        <span>/</span><span>Create collection</span>
+      </div>
+      <div className="product-head">
+        <h1>Create collection</h1>
+        <button type="submit" className="solid" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+      </div>
+      <p className="collection-lead">Group products by category, theme, or customer intent so they are easier to find.</p>
+      {error && <p className="form-error">{error}</p>}
+      <div className="order-grid">
+        <div>
+          <section className="detail-card">
+            <label className="field">Title<input value={title} onChange={e => setTitle(e.target.value)} /></label>
+            <label className="field">Group by
+              <select value={group} onChange={e => setGroupRule(e.target.value)}>
+                <option value="category">Category</option>
+                <option value="theme">Theme</option>
+                <option value="intent">Customer intent</option>
+              </select>
+            </label>
+            {group === 'category' && (
+              <label className="field">Type
+                <select value={rule.startsWith('Category is ') ? rule.slice('Category is '.length) : ''} onChange={e => { setRule(`Category is ${e.target.value}`); setPicked(null) }}>
+                  {categories.map(name => <option key={name}>{name}</option>)}
+                </select>
+              </label>
+            )}
+            {group === 'theme' && (
+              <label className="field">Theme
+                <select value={rule} onChange={e => { setRule(e.target.value); setPicked(null) }}>
+                  <option value="On sale">On sale</option>
+                  <option value="Season is Holiday">Seasonal — holiday</option>
+                  {colors.map(color => <option key={color} value={`Color is ${color}`}>Color — {color}</option>)}
+                  {colors.map(color => <option key={`variant-${color}`} value={`Variant color is ${color}`}>Variant color — {color}</option>)}
+                </select>
+              </label>
+            )}
+            {group === 'intent' && (
+              <label className="field">Audience
+                <select value={rule} onChange={e => { setRule(e.target.value); setPicked(null) }}>
+                  <option>Audience is Men</option>
+                  <option>Audience is Women</option>
+                  <option>Audience is Children</option>
+                </select>
+              </label>
+            )}
+          </section>
+          <section className="detail-card">
+            <h2>Products</h2>
+            <p className="muted">{rule}. Checked products are included when you save.</p>
+            {catalog.map(product => (
+              <label key={product.id} className="choice">
+                <input type="checkbox" checked={chosen.includes(product.title)} onChange={() => toggle(product.title)} />
+                {product.title}
+                <span className="muted">{product.category}{product.color ? ` · ${product.color}` : ''}</span>
+              </label>
+            ))}
+          </section>
+        </div>
+        <aside className="order-side">
+          <section className="detail-card">
+            <h2>Examples</h2>
+            <p className="muted">Start from a collection you might create. Nothing is saved until you click Save.</p>
+            {EXAMPLES.map(item => (
+              <button type="button" key={item.id} className={`text-link block-link ${item.id === exampleId || item.rule === rule ? 'on' : ''}`} onClick={() => { setTitle(item.title); setGroup(item.group); setRule(item.rule); setPicked(null) }}>
+                {item.title}<small>{item.blurb}</small>
+              </button>
+            ))}
+          </section>
+        </aside>
+      </div>
+    </form>
+  )
+}
 
 export function Collections({ focus = {}, onOpen }) {
-  const [rows, reload, error] = useJson('/api/collections')
+  const [rows, , error] = useJson('/api/collections')
   const [detail, setDetail] = useState(null)
   const [query, setQuery] = useState('')
-  const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState('')
-  const [product, setProduct] = useState('')
-  const [formError, setFormError] = useState('')
-  const [catalog] = useJson('/api/products')
 
   useEffect(() => {
     if (!focus.collection) { setDetail(null); return }
@@ -21,19 +168,8 @@ export function Collections({ focus = {}, onOpen }) {
   }, [focus.collection])
 
   const shown = (rows || []).filter(r => r.title.toLowerCase().includes(query.trim().toLowerCase()))
-  const save = e => {
-    e.preventDefault()
-    if (!title.trim()) { setFormError('Enter a collection name.'); return }
-    fetch('/api/collections', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: title.trim(), product }),
-    }).then(async r => {
-      if (!r.ok) throw new Error((await r.json()).error || 'Could not save')
-      setOpen(false); setTitle(''); setProduct(''); setFormError('')
-      reload()
-    }).catch(err => setFormError(err.message))
-  }
+
+  if (focus.create === '1') return <CreateCollection key={focus.example || 'new'} onOpen={onOpen} exampleId={focus.example || ''} />
 
   if (detail?.collection) {
     const collection = detail.collection
@@ -74,8 +210,20 @@ export function Collections({ focus = {}, onOpen }) {
     <>
       <div className="orders-top">
         <h1>Collections</h1>
-        <button type="button" className="solid" onClick={() => setOpen(true)}><Plus size={15} /> Add collection</button>
+        <button type="button" className="solid" onClick={() => onOpen('collections', { create: '1' })}><Plus size={15} /> Add collection</button>
       </div>
+      <section className="panel">
+        <h2>Group products into collections</h2>
+        <p>Make products easier to discover by category, theme, or customer intent. These are starting points — a collection is saved only when you create it.</p>
+        <div className="example-grid">
+          {EXAMPLES.map(item => (
+            <button type="button" key={item.id} className="example-card" onClick={() => onOpen('collections', { create: '1', example: item.id })}>
+              <strong>{item.title}</strong>
+              <span>{item.blurb}</span>
+            </button>
+          ))}
+        </div>
+      </section>
       <div className="sheet">
         <Toolbar label="Filter collections" value={query} onChange={setQuery} />
         <div className="table-scroll">
@@ -103,23 +251,6 @@ export function Collections({ focus = {}, onOpen }) {
         </div>
       </div>
       <a className="learn" href="https://help.shopify.com/en/manual/products/collections" target="_blank" rel="noreferrer">Learn more about collections</a>
-      {open && (
-        <FormModal title="Add collection" onClose={() => setOpen(false)}>{
-          {
-            onSubmit: save,
-            error: formError,
-            fields: <>
-              <label>Title<input autoFocus value={title} onChange={e => setTitle(e.target.value)} /></label>
-              <label>Product
-                <select value={product} onChange={e => setProduct(e.target.value)}>
-                  <option value="">None yet</option>
-                  {(catalog || []).map(p => <option key={p.id}>{p.title}</option>)}
-                </select>
-              </label>
-            </>,
-          }
-        }</FormModal>
-      )}
     </>
   )
 }
