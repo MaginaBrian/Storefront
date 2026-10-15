@@ -201,7 +201,7 @@ export default function App() {
         {view === 'blog-posts' && <BlogPosts focus={focus} onOpen={setView} />}
         {view === 'markets' && <Markets focus={focus} onOpen={setView} />}
         {view === 'catalogs' && <Catalogs focus={focus} onOpen={setView} />}
-        {view === 'rollouts' && <Rollouts />}
+        {view === 'rollouts' && <Rollouts focus={focus} onOpen={setView} />}
         {(view === 'growth' || view === 'attribution') && <Attribution focus={focus} onOpen={setView} />}
         {view === 'autopilot' && <Autopilot onOpen={setView} />}
         {view === 'campaigns' && <Campaigns focus={focus} onOpen={setView} />}

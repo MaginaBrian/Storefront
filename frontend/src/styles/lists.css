@@ -228,6 +228,15 @@
 .discount-search .picker { position: absolute; z-index: 2; top: 42px; left: 0; right: 0; }
 .browse-list { max-height: 280px; overflow: auto; }
 button.learn { border: 0; background: none; width: 100%; cursor: pointer; }
+.name-launch { display: flex; gap: 8px; align-items: center; }
+.name-launch input { flex: 1; }
+.schedule-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.change-well { min-height: 140px; border: 1px dashed var(--line); border-radius: 12px; display: grid; place-items: center; gap: 12px; text-align: center; padding: 24px; background: repeating-linear-gradient(90deg, transparent, transparent 18px, rgba(120, 130, 160, .08) 19px), repeating-linear-gradient(0deg, transparent, transparent 18px, rgba(120, 130, 160, .08) 19px); }
+.audience { display: grid; grid-template-columns: minmax(0, 1fr) 160px; gap: 16px; align-items: center; }
+.audience-row { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 8px; align-items: center; margin: 8px 0; }
+.reach { display: flex; align-items: center; gap: 10px; }
+.reach svg { width: 72px; height: 72px; }
+.reach i { width: 8px; height: 8px; border-radius: 50%; background: #2f9bff; display: inline-block; margin-right: 6px; }
 .export-body { padding: 8px 18px 4px; display: grid; gap: 16px; }
 .export-body fieldset { border: 0; padding: 0; display: grid; gap: 6px; }
 .export-body legend { font-weight: 650; margin-bottom: 4px; }

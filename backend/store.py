@@ -339,24 +339,50 @@ def create_market_catalog():
     return jsonify(query("SELECT * FROM market_catalogs WHERE id = ?", (catalog_id,))[0]), 201
 
 
+def rollout_fields(body):
+    name = str(body.get("name") or "").strip() or "New rollout"
+    note = str(body.get("note") or "").strip()
+    status = body.get("status") if body.get("status") in ("draft", "scheduled") else "scheduled"
+    config = body.get("config") if isinstance(body.get("config"), dict) else {}
+    return name[:120], note[:500], status, json.dumps(config)
+
+
 @bp.get("/api/rollouts")
 def rollouts():
     return jsonify(query("SELECT * FROM rollouts ORDER BY id DESC"))
 
 
+@bp.get("/api/rollouts/<int:rollout_id>")
+def rollout(rollout_id):
+    rows = query("SELECT * FROM rollouts WHERE id = ?", (rollout_id,))
+    if not rows:
+        return jsonify(error="Rollout not found"), 404
+    return jsonify(rows[0])
+
+
 @bp.post("/api/rollouts")
 def create_rollout():
-    body = request.json or {}
-    name = str(body.get("name") or "").strip()
-    if not name:
-        return jsonify(error="Enter a rollout name."), 400
+    name, note, status, config = rollout_fields(request.json or {})
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO rollouts (name, note, created_at) VALUES (?, ?, ?)",
-            (name[:120], str(body.get("note") or "").strip()[:500], date.today().isoformat()),
+            "INSERT INTO rollouts (name, note, created_at, status, config) VALUES (?, ?, ?, ?, ?)",
+            (name, note, date.today().isoformat(), status, config),
         )
         rollout_id = cur.lastrowid
     return jsonify(query("SELECT * FROM rollouts WHERE id = ?", (rollout_id,))[0]), 201
+
+
+@bp.patch("/api/rollouts/<int:rollout_id>")
+def update_rollout(rollout_id):
+    if not query("SELECT id FROM rollouts WHERE id = ?", (rollout_id,)):
+        return jsonify(error="Rollout not found"), 404
+    name, note, status, config = rollout_fields(request.json or {})
+    with connect() as db:
+        db.execute(
+            "UPDATE rollouts SET name = ?, note = ?, status = ?, config = ? WHERE id = ?",
+            (name, note, status, config, rollout_id),
+        )
+    return jsonify(query("SELECT * FROM rollouts WHERE id = ?", (rollout_id,))[0])
 
 
 @bp.get("/api/content")

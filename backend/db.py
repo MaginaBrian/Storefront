@@ -168,7 +168,9 @@ CREATE TABLE IF NOT EXISTS rollouts (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   note TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  config TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS catalog_items (
   id INTEGER PRIMARY KEY,
@@ -423,6 +425,8 @@ def migrate(db):
         _add_col(db, "customers", name, decl)
     _add_col(db, "discounts", "method", "TEXT NOT NULL DEFAULT 'code'")
     _add_col(db, "discounts", "config", "TEXT NOT NULL DEFAULT '{}'")
+    _add_col(db, "rollouts", "status", "TEXT NOT NULL DEFAULT 'draft'")
+    _add_col(db, "rollouts", "config", "TEXT NOT NULL DEFAULT '{}'")
 
 
 def init_db():
