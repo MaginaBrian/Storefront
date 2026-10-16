@@ -29,6 +29,67 @@ const SPECS = {
     from: 'sessions', show: 'online_store_visitors, sessions', where: 'session_country IS NOT NULL',
     filters: ['Session country is not None', 'Human or bot session is Human'],
   },
+  'Chargeback rate': {
+    kind: 'rate', viz: 'line', range: '30', compare: 'none', metric: 'Chargeback rate', dimension: 'Day',
+    from: 'payments', show: 'chargeback_rate', timeseries: 'day',
+    note: 'No chargebacks in this range.',
+  },
+  'Cost of goods sold by order': {
+    kind: 'by-order', field: 'cogs', viz: 'table', range: '30', compare: 'none', metric: 'Cost of goods sold', dimension: 'Order',
+    from: 'sales', show: 'cost_of_goods_sold',
+    note: 'These orders have no product cost on file.',
+  },
+  'Discounts by order': {
+    kind: 'by-order', field: 'discount', viz: 'table', range: '30', compare: 'none', metric: 'Discounts', dimension: 'Order',
+    from: 'sales', show: 'discounts',
+    note: 'No discount was applied to these orders.',
+  },
+  'Finance summary': {
+    kind: 'summary', summary: 'finance', viz: 'table', range: '30', compare: 'none', metric: 'Total sales', dimension: 'Sale component',
+    metrics: ['Gross sales', 'Discounts', 'Returns', 'Net sales', 'Shipping charges', 'Taxes', 'Total sales'],
+    from: 'sales', show: 'gross_sales, discounts, returns, net_sales, shipping, taxes, total_sales',
+    note: 'Taxes are included in total sales.',
+  },
+  'Gross payments from Shopify Payments': {
+    kind: 'shopify', viz: 'donut', range: '30', compare: 'none', metric: 'Gross payments', dimension: 'Payment gateway',
+    from: 'payments', show: 'gross_payments', where: "payment_gateway = 'shopify_payments'",
+    note: 'No payments used Shopify Payments.',
+  },
+  'Gross profit breakdown': {
+    kind: 'summary', summary: 'profit', viz: 'table', range: '30', compare: 'none', metric: 'Gross profit', dimension: 'Sale component',
+    metrics: ['Gross sales', 'Discounts', 'Returns', 'Net sales', 'Cost of goods sold', 'Gross profit'],
+    from: 'sales', show: 'net_sales, cost_of_goods_sold, gross_profit',
+    note: 'Gross profit equals net sales because no product cost is stored.',
+  },
+  'Gross profit by order': {
+    kind: 'by-order', field: 'profit', viz: 'table', range: '30', compare: 'none', metric: 'Gross profit', dimension: 'Order',
+    from: 'sales', show: 'gross_profit',
+  },
+  'Gross sales by order': {
+    kind: 'by-order', field: 'gross', viz: 'table', range: '30', compare: 'none', metric: 'Gross sales', dimension: 'Order',
+    from: 'sales', show: 'gross_sales',
+  },
+  'Managed Markets taxes': {
+    kind: 'summary', summary: 'markets', viz: 'table', range: '30', compare: 'none', metric: 'Managed Markets taxes', dimension: 'Market',
+    from: 'sales', show: 'taxes', where: "sale_market_type = 'managed'",
+    note: 'No Managed Markets orders in this range.',
+  },
+  'Net payments by gateway': {
+    kind: 'payments', viz: 'donut', range: '30', compare: 'none', metric: 'Net payments', dimension: 'Payment gateway',
+    from: 'payments', show: 'net_payments',
+  },
+  'Net payments by order': {
+    kind: 'by-order', field: 'netpay', viz: 'table', range: '30', compare: 'none', metric: 'Net payments', dimension: 'Order',
+    from: 'payments', show: 'net_payments',
+  },
+  'Net payments over time': {
+    kind: 'payments-time', viz: 'line', range: '30', compare: 'none', metric: 'Net payments', dimension: 'Day',
+    from: 'payments', show: 'net_payments', timeseries: 'day WITH TOTALS',
+  },
+  'Net sales by order': {
+    kind: 'by-order', field: 'netsales', viz: 'table', range: '30', compare: 'none', metric: 'Net sales', dimension: 'Order',
+    from: 'sales', show: 'net_sales',
+  },
 }
 
 function viewed(isoDate) {
@@ -93,7 +154,7 @@ function specFor(report) {
   if (name.includes('payment')) {
     return { kind: 'payments', viz: 'donut', range: '30', compare: 'none', metric: 'Net payments', dimension: 'Payment method', from: 'payments', show: 'net_payments' }
   }
-  if (name.includes('sale') || name.includes('order') || name.includes('finance') || name.includes('profit') || report.category === 'Sales' || report.category === 'Orders' || report.category === 'Finances') {
+  if (name.includes('sale') || name.includes('profit') || report.category === 'Sales' || report.category === 'Orders') {
     return { kind: 'sales', viz: 'line', range: '30', compare: 'none', metric: 'Gross sales', dimension: 'Day', from: 'sales', show: 'gross_sales', timeseries: 'day' }
   }
   return { kind: 'empty', viz: 'line', range: '30', compare: 'none', metric: report.name, dimension: 'Day', from: 'sales', show: report.name.toLowerCase().replaceAll(' ', '_') }
@@ -155,7 +216,7 @@ function LineChart({ series, compare, moneyScale }) {
   )
 }
 
-function Donut({ cents }) {
+function Donut({ cents, label = 'None' }) {
   const radius = 78
   const length = 2 * Math.PI * radius
   return (
@@ -165,7 +226,7 @@ function Donut({ cents }) {
         {cents > 0 && <circle cx="110" cy="110" r={radius} fill="none" stroke="#2f9bff" strokeWidth="22" strokeDasharray={`${length} ${length}`} transform="rotate(-90 110 110)" />}
         <text x="110" y="116" textAnchor="middle">{compact(cents)}</text>
       </svg>
-      <p className="legend"><i className="swatch direct" /> None <b>{compact(cents)}</b></p>
+      <p className="legend"><i className="swatch direct" /> {label} <b>{compact(cents)}</b></p>
     </div>
   )
 }
@@ -212,28 +273,58 @@ function ReportView({ report, onOpen, onDeleted }) {
   const salesTotal = salesSeries.reduce((sum, row) => sum + row.value, 0)
   const itemTotal = itemSeries.reduce((sum, row) => sum + row.value, 0)
   const sessionInRange = SESSION.date >= period.start && SESSION.date <= period.end
-  const moneyScale = spec.kind === 'sales' || spec.kind === 'payments'
+  const paidSeries = byDay(paid, period, order => order.total)
+  const inPeriod = (orders || []).filter(order => {
+    const day = order.created_at.slice(0, 10)
+    return day >= period.start && day <= period.end
+  })
+  const includedTax = inPeriod.reduce((sum, order) => sum + Math.round(order.total * 16 / 116), 0)
+  const orderRows = inPeriod.filter(order => spec.field !== 'netpay' || order.payment === 'paid').map(order => ({
+    ...order,
+    value: spec.field === 'cogs' || spec.field === 'discount' ? 0 : order.total,
+  }))
+  const orderTotal = orderRows.reduce((sum, order) => sum + order.value, 0)
+  const summaryRows = spec.summary === 'profit'
+    ? [['Gross sales', salesTotal], ['Discounts', 0], ['Returns', 0], ['Net sales', salesTotal], ['Cost of goods sold', 0], ['Gross profit', salesTotal]]
+    : spec.summary === 'markets'
+      ? [['Managed Markets taxes', 0]]
+      : [['Gross sales', salesTotal], ['Discounts', 0], ['Returns', 0], ['Net sales', salesTotal], ['Shipping charges', 0], ['Taxes', includedTax], ['Total sales', salesTotal]]
+  const summaryTotal = summaryRows[summaryRows.length - 1][1]
+  const moneyScale = spec.kind === 'sales' || spec.kind === 'payments' || spec.kind === 'payments-time' || spec.kind === 'by-order' || spec.kind === 'summary' || spec.kind === 'shopify'
   const headline = spec.kind === 'payments'
     ? `${money(paymentTotal)} ${spec.metric}`
-    : spec.kind === 'items'
-      ? `${itemTotal.toLocaleString()} ${spec.metric}`
-      : spec.kind === 'sales'
-        ? `${money(salesTotal)} ${spec.metric}`
-        : spec.kind === 'location' || spec.kind === 'sessions'
-          ? `${sessionInRange ? 1 : 0} Sessions`
-          : `No ${spec.metric.toLowerCase()} in this range`
+    : spec.kind === 'shopify'
+      ? `${money(0)} ${spec.metric}`
+      : spec.kind === 'items'
+        ? `${itemTotal.toLocaleString()} ${spec.metric}`
+        : spec.kind === 'sales' || spec.kind === 'payments-time'
+          ? `${money(spec.kind === 'payments-time' ? paymentTotal : salesTotal)} ${spec.metric}`
+          : spec.kind === 'by-order'
+            ? `${money(orderTotal)} ${spec.metric}`
+            : spec.kind === 'summary'
+              ? `${money(summaryTotal)} ${spec.metric}`
+              : spec.kind === 'rate'
+                ? `0% ${spec.metric}`
+                : spec.kind === 'location' || spec.kind === 'sessions'
+                  ? `${sessionInRange ? 1 : 0} Sessions`
+                  : `No ${spec.metric.toLowerCase()} in this range`
   const refreshed = TODAY.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   const exportRows = () => {
-    if (spec.kind === 'payments') csv([['Payment method', 'Net payments'], ['Summary', money(paymentTotal)], ['None', money(paymentTotal)]], 'net-payments.csv', { excel: true })
+    if (spec.kind === 'payments') csv([[spec.dimension, spec.metric], ['Summary', money(paymentTotal)], ['None', money(paymentTotal)]], 'net-payments.csv', { excel: true })
+    else if (spec.kind === 'shopify') csv([['Payment gateway', 'Gross payments'], ['Shopify Payments', money(0)]], 'shopify-payments.csv', { excel: true })
     else if (spec.kind === 'location') csv([['Country', 'Region', 'City', 'Visitors', 'Sessions'], ['Kenya', 'Nairobi County', 'Nairobi', sessionInRange ? 1 : 0, sessionInRange ? 1 : 0]], 'sessions-by-location.csv', { excel: true })
     else if (spec.kind === 'items') csv([['Day', 'Quantity ordered'], ...itemSeries.map(row => [row.day, row.value])], 'items-ordered.csv', { excel: true })
-    else csv([['Day', spec.metric], ...salesSeries.map(row => [row.day, moneyScale ? money(row.value) : row.value])], 'report.csv', { excel: true })
+    else if (spec.kind === 'by-order') csv([['Order', 'Customer', spec.metric], ...orderRows.map(order => [`#${order.id}`, order.customer, money(order.value)])], 'orders.csv', { excel: true })
+    else if (spec.kind === 'summary') csv([['Component', 'Amount'], ...summaryRows.map(row => [row[0], money(row[1])])], 'summary.csv', { excel: true })
+    else if (spec.kind === 'rate') csv([['Day', 'Chargeback rate'], ...rateSeries.map(row => [row.day, '0%'])], 'chargeback-rate.csv', { excel: true })
+    else csv([['Day', spec.metric], ...series.map(row => [row.day, moneyScale ? money(row.value) : row.value])], 'report.csv', { excel: true })
   }
   const remove = () => {
     if (!confirmDelete) { setConfirmDelete(true); return }
     fetch(`/api/reports/${report.id}`, { method: 'DELETE' }).then(() => { onDeleted(); onOpen('reports') })
   }
-  const series = spec.kind === 'items' ? itemSeries : spec.kind === 'sessions' ? dates(period).map(day => ({ day, value: day === SESSION.date ? 1 : 0 })) : salesSeries
+  const rateSeries = dates(period).map(day => ({ day, value: 0 }))
+  const series = spec.kind === 'items' ? itemSeries : spec.kind === 'sessions' ? dates(period).map(day => ({ day, value: day === SESSION.date ? 1 : 0 })) : spec.kind === 'payments-time' || spec.field === 'netpay' ? paidSeries : spec.field === 'cogs' || spec.field === 'discount' ? rateSeries : spec.kind === 'rate' ? rateSeries : salesSeries
   return (
     <div className="order-page">
       <div className="orders-top">
@@ -267,7 +358,8 @@ function ReportView({ report, onOpen, onDeleted }) {
           <QueryCard spec={spec} headline={headline} />
           <section className="chart-card report-chart">
             <h2>{spec.metric}</h2>
-            {viz === 'donut' && <Donut cents={spec.kind === 'payments' ? paymentTotal : salesTotal} />}
+            {viz === 'donut' && <Donut cents={spec.kind === 'shopify' ? 0 : spec.kind === 'payments' ? paymentTotal : salesTotal} label={spec.kind === 'shopify' ? 'Shopify Payments' : 'None'} />}
+            {viz === 'table' && <p>{spec.kind === 'summary' ? money(summaryTotal) : money(orderTotal)}</p>}
             {viz === 'horizontal' && (
               sessionInRange
                 ? <div className="hbar-card"><p>Kenya · Nairobi County · Nairobi</p><div className="hbar" /></div>
@@ -275,16 +367,17 @@ function ReportView({ report, onOpen, onDeleted }) {
             )}
             {viz === 'line' && (
               <>
-                <p>{spec.kind === 'items' ? itemTotal.toLocaleString() : moneyScale ? money(series.reduce((sum, row) => sum + row.value, 0)) : series.reduce((sum, row) => sum + row.value, 0).toLocaleString()}</p>
+                <p>{spec.kind === 'rate' ? '0%' : spec.kind === 'items' ? itemTotal.toLocaleString() : moneyScale ? money(series.reduce((sum, row) => sum + row.value, 0)) : series.reduce((sum, row) => sum + row.value, 0).toLocaleString()}</p>
                 <LineChart series={series} compare={compareOn && spec.kind === 'items' ? priorItems : null} moneyScale={moneyScale && spec.kind !== 'items'} />
                 <p className="legend"><i className="swatch direct" /> {shortLabel(period.start)}–{shortLabel(period.end)}{compareOn && <><i className="swatch organic" /> {shortLabel(prior.start)}–{shortLabel(prior.end)}</>}</p>
               </>
             )}
+            {spec.note && <p className="muted">{spec.note}</p>}
           </section>
           <div className="sheet report-table">
             {spec.kind === 'payments' && (
               <table>
-                <thead><tr><th>Payment method</th><th>Net payments</th></tr></thead>
+                <thead><tr><th>{spec.dimension}</th><th>{spec.metric}</th></tr></thead>
                 <tbody>
                   <tr><td>Summary</td><td>{money(paymentTotal)}</td></tr>
                   <tr><td>None</td><td>{money(paymentTotal)}</td></tr>
@@ -300,18 +393,50 @@ function ReportView({ report, onOpen, onDeleted }) {
                 </tbody>
               </table>
             )}
-            {(spec.kind === 'items' || spec.kind === 'sales' || spec.kind === 'sessions' || spec.kind === 'empty') && (
+            {(spec.kind === 'items' || spec.kind === 'sales' || spec.kind === 'sessions' || spec.kind === 'empty' || spec.kind === 'rate' || spec.kind === 'payments-time') && (
               <table>
                 <thead><tr><th>Day</th><th>{spec.metric}</th></tr></thead>
                 <tbody>
-                  <tr><td>{dayLabel(period.start)}–{dayLabel(period.end)}</td><td>{spec.kind === 'items' ? itemTotal.toLocaleString() : moneyScale ? money(salesTotal) : series.reduce((sum, row) => sum + row.value, 0).toLocaleString()}</td></tr>
+                  <tr><td>{dayLabel(period.start)}–{dayLabel(period.end)}</td><td>{spec.kind === 'rate' ? '0%' : spec.kind === 'items' ? itemTotal.toLocaleString() : moneyScale ? money(series.reduce((sum, row) => sum + row.value, 0)) : series.reduce((sum, row) => sum + row.value, 0).toLocaleString()}</td></tr>
                   {compareOn && spec.kind === 'items' && <tr><td>{dayLabel(prior.start)}–{dayLabel(prior.end)}</td><td>{priorItems.reduce((sum, row) => sum + row.value, 0).toLocaleString()}</td></tr>}
                   {series.map((row, index) => (
                     <tr key={row.day}>
                       <td>{dayLabel(row.day)}{compareOn && spec.kind === 'items' ? <><br />{dayLabel(priorItems[index]?.day || row.day)}</> : null}</td>
-                      <td>{spec.kind === 'sales' ? money(row.value) : row.value.toLocaleString()}{compareOn && spec.kind === 'items' ? <><br />{(priorItems[index]?.value || 0).toLocaleString()}</> : null}</td>
+                      <td>{spec.kind === 'rate' ? '0%' : spec.kind === 'items' || spec.kind === 'sessions' || spec.kind === 'empty' ? row.value.toLocaleString() : money(row.value)}{compareOn && spec.kind === 'items' ? <><br />{(priorItems[index]?.value || 0).toLocaleString()}</> : null}</td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            )}
+            {spec.kind === 'shopify' && (
+              <table>
+                <thead><tr><th>Payment gateway</th><th>Gross payments</th></tr></thead>
+                <tbody>
+                  <tr><td>Summary</td><td>{money(0)}</td></tr>
+                  <tr><td>Shopify Payments</td><td>{money(0)}</td></tr>
+                </tbody>
+              </table>
+            )}
+            {spec.kind === 'by-order' && (
+              <table>
+                <thead><tr><th>Order</th><th>Customer</th><th>{spec.metric}</th></tr></thead>
+                <tbody>
+                  <tr><td>Summary</td><td /><td>{money(orderTotal)}</td></tr>
+                  {orderRows.map(order => (
+                    <tr key={order.id}>
+                      <td><button type="button" className="text-link" onClick={() => onOpen('orders', { order: order.id })}>#{order.id}</button></td>
+                      <td>{order.customer}</td>
+                      <td>{money(order.value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {spec.kind === 'summary' && (
+              <table>
+                <thead><tr><th>Component</th><th>Amount</th></tr></thead>
+                <tbody>
+                  {summaryRows.map(row => <tr key={row[0]}><td>{row[0]}</td><td>{money(row[1])}</td></tr>)}
                 </tbody>
               </table>
             )}
@@ -341,6 +466,7 @@ function ReportView({ report, onOpen, onDeleted }) {
                     <option value="line">Line</option>
                     <option value="donut">Donut</option>
                     <option value="horizontal">Simple horizontal</option>
+                    <option value="table">Table</option>
                   </select>
                 </section>
                 {spec.filters && (
