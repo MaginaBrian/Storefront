@@ -140,7 +140,7 @@ MENUS = [
 ]
 
 REPORTS = [
-    ("Net payments by method", "Finances", "2026-10-14"),
+    ("Net payments by method", "Finances", "2026-10-16"),
     ("Items ordered over time", "Orders", "2026-10-14"),
     ("Gross sales over time", "Sales", "2026-10-02"),
     ("Sessions by location", "Acquisition", None),
@@ -346,7 +346,7 @@ def load(db):
     )
     db.executemany("INSERT INTO menus (id, name, items) VALUES (?, ?, ?)", MENUS)
     db.executemany(
-        "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Shopify')",
+        "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Storefront')",
         REPORTS,
     )
     db.executemany(

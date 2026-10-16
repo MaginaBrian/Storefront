@@ -549,11 +549,20 @@ def create_report():
     category = str(body.get("category") or "Sales").strip() or "Sales"
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Maison')",
+            "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Storefront')",
             (name[:140], category[:40], date.today().isoformat()),
         )
         report_id = cur.lastrowid
     return jsonify(query("SELECT * FROM reports WHERE id = ?", (report_id,))[0]), 201
+
+
+@bp.delete("/api/reports/<int:report_id>")
+def delete_report(report_id):
+    if not query("SELECT id FROM reports WHERE id = ?", (report_id,)):
+        return jsonify(error="Report not found"), 404
+    with connect() as db:
+        db.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+    return jsonify(ok=True)
 
 
 @bp.get("/api/analytics")

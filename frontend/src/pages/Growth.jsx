@@ -248,7 +248,7 @@ export function Autopilot({ onOpen }) {
           <h2>Autopilot is analyzing your store's catalog, pricing, profit margins, and sales history to identify performance trends and uncover opportunities to grow.</h2>
           <h3 className="with-icon"><Clock size={16} /> Activity</h3>
           <p className="muted">Yesterday</p>
-          <ul className="activity">
+          <ul className="activity-list">
             <li><i /> Analyzing your sales in the last 30 days <time>4:19 PM</time></li>
             <li><i /> Analyzing your store's catalogue and inventory <time>4:19 PM</time></li>
             <li><i className="live" /> Autopilot is initializing <time>4:19 PM</time></li>

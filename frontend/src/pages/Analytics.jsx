@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BarChart3, ChevronDown, Info, MoreHorizontal } from 'lucide-react'
+import { BarChart3, ChevronDown, MoreHorizontal } from 'lucide-react'
 
 const HOURS = ['12 AM', '5 AM', '10 AM', '3 PM', '8 PM']
 const BREAKDOWN = ['Gross sales', 'Discounts', 'Sales reversals', 'Net sales', 'Shipping charges', 'Return fees', 'Taxes', 'Total sales']
@@ -88,7 +88,6 @@ export function Analytics({ onOpen }) {
         </div>
       </div>
       {targets && <p className="target-note">Targets compare today with Oct 13, 2026. Sessions target is 1. Sales target is KES 0.00.</p>}
-      <p className="notice"><Info size={15} /> Beginning Sept 21, 2026, sessions and related metrics may shift as Shopify Analytics enables better visibility into real shopper activity. <a href="https://help.shopify.com/en/manual/reports-and-analytics" target="_blank" rel="noreferrer">Learn more</a></p>
       <div className="analytics-filters">
         <label>Range
           <select value={range} onChange={e => setRange(e.target.value)}>
