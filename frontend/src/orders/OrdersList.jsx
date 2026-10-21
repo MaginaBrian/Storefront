@@ -4,7 +4,6 @@ import { Tag } from '../components/Tag.jsx'
 import { useJson } from '../lib/api.js'
 import { money } from '../lib/money.js'
 import ExportOrders from './ExportOrders.jsx'
-import OrderForm from './OrderForm.jsx'
 import { formatWhen } from './time.js'
 
 const ORDER_COLS = [
@@ -26,7 +25,6 @@ export default function OrdersList({ onChanged, onOpen, focus = {} }) {
   const [picked, setPicked] = useState(() => new Set())
   const [cols, setCols] = useState(() => Object.fromEntries(ORDER_COLS.map(([k]) => [k, true])))
   const [colsOpen, setColsOpen] = useState(false)
-  const [creating, setCreating] = useState(false)
   const [exporting, setExporting] = useState(false)
   const headRef = useRef(null)
 
@@ -59,10 +57,6 @@ export default function OrdersList({ onChanged, onOpen, focus = {} }) {
     if (headRef.current) headRef.current.indeterminate = pickedShown > 0 && !allPicked
   }, [pickedShown, allPicked])
 
-  const saved = created => {
-    reload(); reloadSummary(); onChanged()
-    if (created?.id) onOpen('orders', { order: created.id })
-  }
   const selected = (rows || []).find(r => String(r.id) === String(focus.order))
   const [related, setRelated] = useState(null)
   const [channels, setChannels] = useState([])
@@ -89,7 +83,7 @@ export default function OrdersList({ onChanged, onOpen, focus = {} }) {
         <h1>Orders</h1>
         <div className="orders-actions">
           <button type="button" className="ghost" onClick={() => setExporting(true)}>Export</button>
-          <button type="button" className="solid" onClick={() => setCreating(true)}>Create order</button>
+          <button type="button" className="solid" onClick={() => onOpen('drafts', { create: '1', customer: focus.customer || '' })}>Create order</button>
         </div>
       </div>
       {selected && (
@@ -193,7 +187,6 @@ export default function OrdersList({ onChanged, onOpen, focus = {} }) {
         </div>
       </div>
       <a className="learn" href="https://help.shopify.com/en/manual/orders" target="_blank" rel="noreferrer">Learn more about orders</a>
-      {creating && <OrderForm mode="order" initialCustomer={focus.customer || ''} onClose={() => setCreating(false)} onSaved={saved} />}
       {exporting && (
         <ExportOrders
           rows={rows || []}

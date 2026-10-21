@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, Info, Pencil, Plus, Search, X } from 'lucide-react'
+import { ChevronLeft, Info, MoreHorizontal, Pencil, Plus, Search, Store, X } from 'lucide-react'
 import { useJson } from '../lib/api.js'
 import { money } from '../lib/money.js'
 
@@ -17,9 +17,16 @@ function cents(value) {
 
 export default function CreateDraft({ onOpen, initialCustomer = '' }) {
   const [products] = useJson('/api/products')
+  const [inventory] = useJson('/api/inventory')
   const [customers] = useJson('/api/customers')
   const [lines, setLines] = useState([])
+  const [selected, setSelected] = useState(() => new Set())
+  const [more, setMore] = useState(false)
+  const [dueLater, setDueLater] = useState(true)
   const [customer, setCustomer] = useState(initialCustomer)
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [address, setAddress] = useState('')
   const [currency, setCurrency] = useState('KES')
   const [noteOpen, setNoteOpen] = useState(false)
   const [note, setNote] = useState('')
@@ -47,10 +54,19 @@ export default function CreateDraft({ onOpen, initialCustomer = '' }) {
   const tax = lines.length ? Math.round(total * 16 / 116) : null
   const price = centsValue => currency === 'KES' ? money(centsValue) : `${currency} ${(centsValue / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+  const catalog = useMemo(() => {
+    const stock = (inventory || []).map(row => ({
+      key: `i-${row.id}`, title: row.product, variant: row.variant || '', price: row.price || 0,
+    }))
+    const goods = (products || []).map(row => ({
+      key: `p-${row.id}`, title: row.title, variant: row.color || '', price: row.price || 0,
+    }))
+    return [...stock, ...goods]
+  }, [inventory, products])
   const productHits = useMemo(() => {
     const q = productQuery.trim().toLowerCase()
-    return (products || []).filter(row => !q || row.title.toLowerCase().includes(q)).slice(0, 6)
-  }, [products, productQuery])
+    return catalog.filter(row => !q || `${row.title} ${row.variant}`.toLowerCase().includes(q)).slice(0, 8)
+  }, [catalog, productQuery])
   const customerHits = useMemo(() => {
     const q = customer.trim().toLowerCase()
     if (q.length < 1) return []
@@ -59,13 +75,30 @@ export default function CreateDraft({ onOpen, initialCustomer = '' }) {
 
   useEffect(() => { setError('') }, [customer, lines])
 
-  const addLine = (title, priceCents, qty = 1) => {
-    setLines(current => [...current, { key: `${title}-${Date.now()}`, title, price: priceCents, qty }])
+  const addLine = (title, priceCents, qty = 1, variant = '') => {
+    setLines(current => [...current, { key: `${title}-${variant}-${Date.now()}`, title, variant, size: '', color: variant, price: priceCents, qty }])
   }
+  const setLine = (key, patch) => setLines(current => current.map(line => line.key === key ? { ...line, ...patch } : line))
   const addProduct = product => {
-    addLine(product.title, product.price, 1)
+    addLine(product.title, product.price, 1, product.variant || '')
     setPicking(false)
     setProductQuery('')
+  }
+  const setQty = (key, value) => {
+    const qty = Number(value)
+    if (!Number.isInteger(qty) || qty < 1) return
+    setLines(current => current.map(line => line.key === key ? { ...line, qty } : line))
+  }
+  const toggleLine = key => setSelected(current => {
+    const next = new Set(current)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    return next
+  })
+  const removeSelected = () => {
+    setLines(current => current.filter(line => !selected.has(line.key)))
+    setSelected(new Set())
+    setMore(false)
   }
   const addCustom = () => {
     const priceCents = cents(custom.price)
@@ -108,12 +141,15 @@ export default function CreateDraft({ onOpen, initialCustomer = '' }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         customer: customer.trim(),
-        lines: lines.map(line => ({ title: line.title, price: line.price, qty: line.qty })),
+        lines: lines.map(line => ({ title: line.title, price: line.price, qty: line.qty, size: line.size, color: line.color || line.variant || '' })),
         discount: discountCents,
         shipping,
         note: note.trim(),
         tags: tags.trim(),
         currency,
+        phone: phone.trim(),
+        email: email.trim(),
+        address: address.trim(),
       }),
     }).then(async r => {
       const body = await r.json()
@@ -125,7 +161,7 @@ export default function CreateDraft({ onOpen, initialCustomer = '' }) {
           body: JSON.stringify({ action: 'invoice' }),
         })
         if (!sent.ok) throw new Error('The draft was saved, but the invoice was not sent.')
-        onOpen('drafts', { draft: body.id })
+        onOpen('drafts', { draft: body.id, invoice: '1' })
         return
       }
       if (intent === 'paid') {
@@ -144,32 +180,56 @@ export default function CreateDraft({ onOpen, initialCustomer = '' }) {
   }
 
   const discountLabel = discount?.kind === 'percent' ? `${discount.value}%` : discount ? price(discount.cents) : '—'
+  const itemCount = lines.reduce((sum, line) => sum + line.qty, 0)
+  const dirty = lines.length > 0 || customer !== initialCustomer || phone.trim() !== '' || email.trim() !== '' || address.trim() !== '' || note.trim() !== '' || tags.trim() !== '' || discount != null || shipping > 0 || currency !== 'KES' || !dueLater
 
   return (
     <div className="order-page">
-      <div className="crumb">
+      <div className="create-bar">
         <button type="button" className="text-link back" onClick={() => onOpen('drafts')}><ChevronLeft size={16} /> Drafts</button>
+        <div className="create-actions">
+          {dirty && <span className="unsaved">Unsaved changes</span>}
+          <button type="button" className="ghost" disabled={!dirty || busy} onClick={() => onOpen('drafts')}>Discard</button>
+          <button type="button" className="solid" disabled={busy} onClick={() => save()}>{busy ? 'Saving…' : 'Save'}</button>
+        </div>
       </div>
-      <div className="order-head">
-        <h1 className="title">Create order</h1>
-        <button type="button" className="solid" disabled={busy} onClick={() => save()}>{busy ? 'Saving…' : 'Save'}</button>
-      </div>
+      <h1 className="title">Create order</h1>
       <div className="order-grid">
         <div>
-          <h2 className="section-label">Products</h2>
           <section className="detail-card product-drop">
+            <div className="card-title">
+              <h2>Products</h2>
+              <div className="card-tools">
+                <div className="menu">
+                  <button type="button" className="icon-btn" aria-label="More product actions" onClick={() => setMore(o => !o)}><MoreHorizontal size={16} /></button>
+                  {more && (
+                    <div className="menu-pop">
+                      <button type="button" disabled={selected.size === 0} onClick={removeSelected}>Remove selected</button>
+                    </div>
+                  )}
+                </div>
+                <button type="button" className="ghost" onClick={() => { setCustomOpen(o => !o); setPicking(false) }}>Custom item</button>
+                <button type="button" className="ghost" onClick={() => { setPicking(o => !o); setCustomOpen(false) }}><Plus size={14} /> Product</button>
+              </div>
+            </div>
             {lines.map(line => (
-              <div className="line-row" key={line.key}>
-                <strong>{line.title}</strong>
-                <span className="muted">{price(line.price)} × {line.qty}</span>
+              <div className="draft-line" key={line.key}>
+                <input type="checkbox" aria-label={`Select ${line.title}`} checked={selected.has(line.key)} onChange={() => toggleLine(line.key)} />
+                <span className="thumb" aria-hidden="true" />
+                <span>
+                  <strong>{line.title}</strong>
+                  <span className="line-meta">
+                    <input aria-label={`Size for ${line.title}`} placeholder="Size" value={line.size} onChange={e => setLine(line.key, { size: e.target.value })} />
+                    <input aria-label={`Color for ${line.title}`} placeholder="Color" value={line.color} onChange={e => setLine(line.key, { color: e.target.value })} />
+                  </span>
+                </span>
+                <span>{price(line.price)}</span>
+                <input className="qty-input" inputMode="numeric" aria-label={`Quantity for ${line.title}`} value={line.qty} onChange={e => setQty(line.key, e.target.value)} />
                 <b>{price(line.price * line.qty)}</b>
                 <button type="button" className="icon-btn" aria-label={`Remove ${line.title}`} onClick={() => setLines(current => current.filter(item => item.key !== line.key))}><X size={14} /></button>
               </div>
             ))}
-            <div className="drop-actions">
-              <button type="button" className="ghost" onClick={() => { setCustomOpen(o => !o); setPicking(false) }}><Plus size={14} /> Custom item</button>
-              <button type="button" className="ghost" onClick={() => { setPicking(o => !o); setCustomOpen(false) }}><Plus size={14} /> Product</button>
-            </div>
+            {lines.length === 0 && <p className="muted">Add a product or a custom item.</p>}
             {customOpen && (
               <div className="inline-form">
                 <input placeholder="Item name" value={custom.title} onChange={e => setCustom(c => ({ ...c, title: e.target.value }))} />
@@ -182,15 +242,26 @@ export default function CreateDraft({ onOpen, initialCustomer = '' }) {
               <div className="picker">
                 <label className="finder"><Search size={15} /><input autoFocus placeholder="Search products" value={productQuery} onChange={e => setProductQuery(e.target.value)} /></label>
                 {productHits.map(product => (
-                  <button type="button" key={product.id} onClick={() => addProduct(product)}>{product.title}<span>{money(product.price)}</span></button>
+                  <button type="button" key={product.key} onClick={() => addProduct(product)}>
+                    <span>{product.title}{product.variant ? <small>{product.variant}</small> : null}</span>
+                    <span>{money(product.price)}</span>
+                  </button>
                 ))}
-                {products && productHits.length === 0 && <p className="muted">No products match.</p>}
+                {catalog.length > 0 && productHits.length === 0 && <p className="muted">No products match.</p>}
               </div>
             )}
           </section>
-          <h2 className="section-label">Payment</h2>
           <section className="detail-card pay-card">
-            <div className="pay-line"><span>Subtotal</span><span /><b>{price(subtotal)}</b></div>
+            <div className="card-title">
+              <h2>Payment</h2>
+              {lines.length > 0 && (
+                <div className="card-tools">
+                  <button type="button" className="ghost" disabled={busy} onClick={() => save('invoice')}>Send invoice</button>
+                  <button type="button" className="solid" disabled={busy} onClick={() => save('paid')}>Mark as paid</button>
+                </div>
+              )}
+            </div>
+            <div className="pay-line"><span>Subtotal</span><span className="muted">{itemCount === 0 ? '' : `${itemCount} item${itemCount === 1 ? '' : 's'}`}</span><b>{price(subtotal)}</b></div>
             <div className="pay-line">
               <button type="button" className="text-link" onClick={() => setDiscountOpen(o => !o)}>Add discount</button>
               <span className="muted">{discountLabel}</span>
@@ -226,39 +297,47 @@ export default function CreateDraft({ onOpen, initialCustomer = '' }) {
             {lines.length === 0 ? (
               <p className="due-note">Add a product to calculate total and view payment options</p>
             ) : (
-              <div className="pay-options">
-                <p className="due-note">Send an invoice with a checkout link, or mark the draft as paid if you already received payment.</p>
-                <button type="button" className="ghost" disabled={busy} onClick={() => save('invoice')}>Send invoice</button>
-                <button type="button" className="solid" disabled={busy} onClick={() => save('paid')}>Mark as paid</button>
+              <div className="due-row">
+                <span>Payment due later</span>
+                <button type="button" className={dueLater ? 'switch on' : 'switch'} role="switch" aria-checked={dueLater} aria-label="Payment due later" onClick={() => setDueLater(value => !value)}><i /></button>
               </div>
             )}
           </section>
           {error && <p className="form-error">{error}</p>}
         </div>
         <aside className="order-side">
-          <section className="detail-card side-head">
-            <h2>Notes</h2>
-            <button type="button" className="icon-btn" aria-label="Add note" onClick={() => setNoteOpen(o => !o)}><Plus size={16} /></button>
+          <section className="detail-card">
+            <div className="side-head">
+              <h2>Notes</h2>
+              <button type="button" className="icon-btn" aria-label="Add note" onClick={() => setNoteOpen(o => !o)}><Plus size={16} /></button>
+            </div>
+            {noteOpen && <textarea rows={4} placeholder="Add a note" value={note} onChange={e => setNote(e.target.value)} />}
           </section>
-          {noteOpen && (
-            <section className="detail-card">
-              <textarea rows={4} placeholder="Add a note" value={note} onChange={e => setNote(e.target.value)} />
-            </section>
-          )}
           <section className="detail-card">
             <h2>Customer</h2>
             <label className="finder"><Search size={15} /><input placeholder="Search or create a customer" value={customer} onChange={e => setCustomer(e.target.value)} /></label>
             {customerHits.length > 0 && (
               <div className="picker">
                 {customerHits.map(row => (
-                  <button type="button" key={row.id} onClick={() => setCustomer(row.name)}>{row.name}<span>{row.email}</span></button>
+                  <button type="button" key={row.id} onClick={() => {
+                    setCustomer(row.name)
+                    setEmail(row.email || '')
+                    setPhone(row.phone || '')
+                    setAddress(row.address || (row.location ? `${row.location}, Kenya` : ''))
+                  }}>{row.name}<span>{row.email}</span></button>
                 ))}
               </div>
             )}
+            <label className="field">Mobile<input value={phone} onChange={e => setPhone(e.target.value)} /></label>
+            <label className="field">Email<input value={email} onChange={e => setEmail(e.target.value)} /></label>
+            <label className="field">Delivery address<input value={address} onChange={e => setAddress(e.target.value)} /></label>
           </section>
           <section className="detail-card">
             <h2>Markets</h2>
-            <span className="market-pill">{market}</span>
+            <div className="market-row">
+              <span className="market-pill">{market}</span>
+              <button type="button" className="icon-btn" aria-label={`Open ${market} market`} onClick={() => onOpen('markets', { market })}><Store size={16} /></button>
+            </div>
           </section>
           <section className="detail-card">
             <h2>Currency</h2>

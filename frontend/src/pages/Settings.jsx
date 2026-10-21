@@ -410,7 +410,7 @@ function ContentLinks({ onOpen }) {
   ]
   return (
     <section className="settings-block">
-      <p className="lead">Storefront content for maison.co.ke. Pages and menus are what customers see. Catalogs change prices by market.</p>
+      <p className="lead">Piacì content for maison.co.ke. Pages and menus are what customers see. Catalogs change prices by market.</p>
       <div className="settings-rows">
         {links.map(([view, label, detail]) => (
           <button type="button" className="settings-row" key={view} onClick={() => onOpen(view)}>

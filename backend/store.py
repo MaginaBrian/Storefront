@@ -101,7 +101,7 @@ def create_segment():
         return jsonify(error="Enter a segment name."), 400
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO segments (name, query, percent, last_activity, created_by) VALUES (?, 'custom', 0, ?, 'Storefront')",
+            "INSERT INTO segments (name, query, percent, last_activity, created_by) VALUES (?, 'custom', 0, ?, 'Piacì')",
             (name[:120], date.today().isoformat()),
         )
         segment_id = cur.lastrowid
@@ -549,7 +549,7 @@ def create_report():
     category = str(body.get("category") or "Sales").strip() or "Sales"
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Storefront')",
+            "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Piacì')",
             (name[:140], category[:40], date.today().isoformat()),
         )
         report_id = cur.lastrowid

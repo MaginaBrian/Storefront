@@ -94,7 +94,56 @@ tr.picked td { background: #eef0ff; }
 .clickable { cursor: pointer; }
 .clickable:hover td { background: #fafafd; }
 .text-link:hover { color: var(--indigo); }
+.create-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.create-actions { display: flex; align-items: center; gap: 8px; }
+.unsaved { background: #1c1c1c; color: #fff; border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: 13px; }
+.card-title > .card-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.product-drop .menu-pop { position: absolute; z-index: 4; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 12px 40px rgba(20, 16, 40, .12); }
+.draft-line { display: grid; grid-template-columns: 18px 40px minmax(0, 1fr) auto 72px auto 32px; gap: 10px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.draft-line small, .picker button small { display: block; color: var(--muted); font-weight: 400; }
+.thumb { width: 40px; height: 40px; border-radius: 8px; background: #ececf1; border: 1px solid var(--line); }
+.qty-input { width: 72px; text-align: center; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; color: var(--text); background: #fff; }
+.due-row { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 12px; }
+.switch { width: 36px; height: 20px; border-radius: 999px; background: #c5c8d4; position: relative; }
+.switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.switch.on { background: #303036; }
+.switch.on i { left: 18px; }
+.market-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: block; width: 100%; text-align: left; }
+.line-meta { display: flex; gap: 6px; margin-top: 6px; }
+.line-meta input { width: 96px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font: inherit; background: #fff; color: var(--text); }
+.ticket-page { display: grid; justify-items: center; gap: 16px; }
+.ticket-actions { display: flex; gap: 8px; width: min(420px, 100%); justify-content: flex-end; }
+.ticket { width: min(420px, 100%); background: #fff; color: #111; border: 1.5px solid #111; border-radius: 28px; padding: 28px 22px 22px; }
+.ticket h1 { margin: 0 0 22px; text-align: center; font: 500 42px var(--serif); letter-spacing: .22em; text-indent: .22em; color: #111; }
+.ticket-meta, .ticket-client div, .ticket-lines li, .ticket-totals div { display: flex; justify-content: space-between; gap: 16px; }
+.ticket-meta { font-size: 13px; }
+.ticket-id { margin: 2px 0 16px; font-size: 20px; font-weight: 700; }
+.ticket-client { margin: 0 0 18px; }
+.ticket-client div { align-items: baseline; padding: 3px 0; }
+.ticket-client dt { color: #666; font-weight: 500; }
+.ticket-client dd { margin: 0; text-align: right; }
+.ticket-qr { width: 168px; height: 168px; display: block; margin: 8px auto 22px; }
+.ticket-qr rect { fill: #111; }
+.ticket-lines { list-style: none; padding: 0; margin: 0; }
+.ticket-lines li { align-items: flex-start; padding: 12px 0; border-top: 1px solid #e6e6e6; }
+.ticket-lines strong, .ticket-lines span { display: block; }
+.ticket-lines span { color: #555; font-size: 12px; margin-top: 2px; }
+.ticket-lines b, .ticket-totals dd { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ticket-totals { margin: 8px 0 0 auto; width: min(240px, 100%); }
+.ticket-totals div { padding: 2px 0; font-size: 13px; letter-spacing: .04em; }
+.ticket-totals dt { text-transform: uppercase; }
+.ticket-totals div:last-child { font-weight: 700; }
+.ticket-note { margin: 28px 0 18px; text-align: center; color: #333; font-size: 13px; font-style: italic; }
+.ticket-bars { width: 100%; height: 54px; display: block; }
+.ticket-bars rect { fill: #111; }
+.ticket-code { margin: 4px 0 0; text-align: center; letter-spacing: .12em; font-size: 12px; }
+@media print {
+  .shell { display: block; background: #fff; }
+  .shell > aside, .ticket-actions { display: none !important; }
+  .main, .ticket-page { padding: 0; }
+  .ticket { border-color: #111; }
+}
 .search { position: relative; }
 .search-results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; background: #fff; border: 1px solid var(--line);
   border-radius: 10px; padding: 4px; box-shadow: 0 12px 40px rgba(20, 16, 40, .12); display: grid; }

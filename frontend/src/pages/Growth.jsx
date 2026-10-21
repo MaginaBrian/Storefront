@@ -139,7 +139,7 @@ export function Attribution({ focus = {}, onOpen }) {
   }), { direct: 0, organic: 0 })
   const rows = [
     { id: 'direct', name: 'Direct', type: 'Direct', sessions: totals.direct },
-    { id: 'organic', name: 'Storefront organic', type: 'Organic', sessions: totals.organic },
+    { id: 'organic', name: 'Piacì organic', type: 'Organic', sessions: totals.organic },
   ].filter(row => channel === 'all' || row.id === channel)
   const exportRows = () => csv([
     ['Channel', 'Type', 'Sessions', 'Sales', 'Orders', 'Conversion rate', 'Orders from new customers', 'Orders from returning customers'],
@@ -154,7 +154,7 @@ export function Attribution({ focus = {}, onOpen }) {
             <button type="button" className="ghost" aria-expanded={channelsOpen} onClick={() => setChannelsOpen(open => !open)}>Channels <ChevronDown size={14} /></button>
             {channelsOpen && (
               <div className="popover menu-pop">
-                {[['all', 'All channels'], ['direct', 'Direct'], ['organic', 'Storefront organic']].map(([id, label]) => (
+                {[['all', 'All channels'], ['direct', 'Direct'], ['organic', 'Piacì organic']].map(([id, label]) => (
                   <button type="button" key={id} onClick={() => { setChannel(id); setChannelsOpen(false) }}>{label}</button>
                 ))}
               </div>
@@ -189,7 +189,7 @@ export function Attribution({ focus = {}, onOpen }) {
           : <p className="muted chart-empty">No sales in this range. Sessions are recorded, and none of them placed an order.</p>}
         <p className="legend">
           {channel !== 'organic' && <><i className="swatch direct" /> Direct</>}
-          {channel !== 'direct' && <><i className="swatch organic" /> Storefront organic</>}
+          {channel !== 'direct' && <><i className="swatch organic" /> Piacì organic</>}
         </p>
       </section>
       <div className="info-banner">
@@ -395,7 +395,7 @@ function CampaignEditor({ campaign, onOpen, onSaved }) {
           {rules && <p className="muted">A rule can match a UTM campaign, source, or the shareable link above and attach those sessions to this campaign.</p>}
           <p className="side-label">Campaign activities</p>
           <button type="button" className="block-link" onClick={() => setActivity(open => !open)}>Manually assign existing marketing traffic</button>
-          {activity && <p className="muted">The unassigned Storefront organic session on Oct 14 can be attached here after you save the campaign.</p>}
+          {activity && <p className="muted">The unassigned Piacì organic session on Oct 14 can be attached here after you save the campaign.</p>}
         </aside>
       </div>
     </>

@@ -427,6 +427,16 @@ def migrate(db):
     _add_col(db, "discounts", "config", "TEXT NOT NULL DEFAULT '{}'")
     _add_col(db, "rollouts", "status", "TEXT NOT NULL DEFAULT 'draft'")
     _add_col(db, "rollouts", "config", "TEXT NOT NULL DEFAULT '{}'")
+    for name, decl in (
+        ("phone", "TEXT NOT NULL DEFAULT ''"),
+        ("email", "TEXT NOT NULL DEFAULT ''"),
+        ("address", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        _add_col(db, "drafts", name, decl)
+    _add_col(db, "draft_lines", "size", "TEXT NOT NULL DEFAULT ''")
+    _add_col(db, "draft_lines", "color", "TEXT NOT NULL DEFAULT ''")
+    _add_col(db, "order_lines", "size", "TEXT NOT NULL DEFAULT ''")
+    _add_col(db, "order_lines", "color", "TEXT NOT NULL DEFAULT ''")
 
 
 def init_db():

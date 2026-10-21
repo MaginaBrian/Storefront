@@ -1,4 +1,4 @@
-# Storefront
+# Piacì
 
 Admin for **Maison**, a Nairobi clothing and fabric store. Prices are in Kenyan shillings. The screens follow a store-admin layout, and every list is backed by a local API instead of a hosted shop.
 

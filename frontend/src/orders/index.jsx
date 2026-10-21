@@ -1,12 +1,14 @@
 import Checkouts from './Checkouts.jsx'
 import CreateDraft from './CreateDraft.jsx'
 import DraftDetail from './DraftDetail.jsx'
+import Invoice from './Invoice.jsx'
 import DraftsList from './DraftsList.jsx'
 import OrderDetail from './OrderDetail.jsx'
 import OrdersList from './OrdersList.jsx'
 
 export default function OrdersSection({ view, onChanged, onOpen, focus }) {
   if (view === 'drafts' && focus?.create === '1') return <CreateDraft onOpen={onOpen} initialCustomer={focus.customer || ''} />
+  if (view === 'drafts' && focus?.draft && focus?.invoice === '1') return <Invoice draftId={focus.draft} onOpen={onOpen} />
   if (view === 'drafts' && focus?.draft) return <DraftDetail draftId={focus.draft} onOpen={onOpen} />
   if (view === 'drafts') return <DraftsList onOpen={onOpen} focus={focus} />
   if (view === 'checkouts') return <Checkouts />

@@ -114,11 +114,11 @@ CATALOG_ITEMS = [
 ]
 
 SEGMENTS = [
-    (1, "Customers who have purchased at least once", "purchased", 100, "2026-09-27", "Storefront"),
-    (2, "Email subscribers", "subscribers", 0, "2026-09-27", "Storefront"),
-    (3, "Abandoned checkouts in the last 30 days", "abandoned", 0, "2026-09-27", "Storefront"),
-    (4, "Customers who have purchased more than once", "repeat", 0, "2026-09-27", "Storefront"),
-    (5, "Customers who haven't purchased", "never", 0, "2026-09-27", "Storefront"),
+    (1, "Customers who have purchased at least once", "purchased", 100, "2026-09-27", "Piacì"),
+    (2, "Email subscribers", "subscribers", 0, "2026-09-27", "Piacì"),
+    (3, "Abandoned checkouts in the last 30 days", "abandoned", 0, "2026-09-27", "Piacì"),
+    (4, "Customers who have purchased more than once", "repeat", 0, "2026-09-27", "Piacì"),
+    (5, "Customers who haven't purchased", "never", 0, "2026-09-27", "Piacì"),
 ]
 
 COLORS = [
@@ -163,8 +163,8 @@ REPORTS = [
     ("Sessions by device type", "Behavior", None),
     ("Sessions by landing page", "Behavior", None),
     ("Shop Campaign ROAS", "Behavior", None),
-    ("Storefront agent assisted sessions", "Behavior", None),
-    ("Storefront agent conversations and feedback", "Behavior", None),
+    ("Piacì agent assisted sessions", "Behavior", None),
+    ("Piacì agent conversations and feedback", "Behavior", None),
     ("Customer cohort analysis", "Customers", None),
     ("Customers by location", "Customers", None),
     ("New customer sales over time", "Customers", None),
@@ -346,7 +346,7 @@ def load(db):
     )
     db.executemany("INSERT INTO menus (id, name, items) VALUES (?, ?, ?)", MENUS)
     db.executemany(
-        "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Storefront')",
+        "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Piacì')",
         REPORTS,
     )
     db.executemany(

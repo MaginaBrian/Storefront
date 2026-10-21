@@ -88,7 +88,7 @@ export default function App() {
   return (
     <div className="shell">
       <aside>
-        <button type="button" className="brand" onClick={() => setView('home')}>Storefront</button>
+        <button type="button" className="brand" onClick={() => setView('home')}>Piacì</button>
         <label className="search"><Search size={15} /><input id="nav-search" placeholder="Search" value={search} onChange={e => setSearch(e.target.value)} /><kbd>Ctrl K</kbd>
           {(pageHits.length > 0 || hits.length > 0) && (
             <div className="search-results">

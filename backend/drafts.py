@@ -14,23 +14,23 @@ def next_draft_id(db):
 def draft_source_lines(db, draft):
     if draft["order_id"]:
         rows = db.execute(
-            "SELECT title, price, qty, line_total FROM order_lines WHERE order_id = ? ORDER BY id",
+            "SELECT title, price, qty, line_total, size, color FROM order_lines WHERE order_id = ? ORDER BY id",
             (draft["order_id"],),
         ).fetchall()
     else:
         rows = db.execute(
-            "SELECT title, price, qty, line_total FROM draft_lines WHERE draft_id = ? ORDER BY id",
+            "SELECT title, price, qty, line_total, size, color FROM draft_lines WHERE draft_id = ? ORDER BY id",
             (draft["id"],),
         ).fetchall()
     if rows:
         return [dict(row) for row in rows]
-    return [{"title": "Draft items", "price": draft["total"], "qty": 1, "line_total": draft["total"]}]
+    return [{"title": "Draft items", "price": draft["total"], "qty": 1, "line_total": draft["total"], "size": "", "color": ""}]
 
 
 def copy_draft_lines(db, draft_id, lines):
     db.executemany(
-        "INSERT INTO draft_lines (draft_id, title, price, qty, line_total) VALUES (?, ?, ?, ?, ?)",
-        [(draft_id, line["title"], line["price"], line["qty"], line["line_total"]) for line in lines],
+        "INSERT INTO draft_lines (draft_id, title, price, qty, line_total, size, color) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [(draft_id, line["title"], line["price"], line["qty"], line["line_total"], line.get("size") or "", line.get("color") or "") for line in lines],
     )
 
 def load_draft(draft_id):
@@ -39,13 +39,13 @@ def load_draft(draft_id):
         return None
     draft = rows[0]
     if draft["order_id"]:
-        lines = query("SELECT id, title, price, qty, line_total FROM order_lines WHERE order_id = ? ORDER BY id", (draft["order_id"],))
+        lines = query("SELECT id, title, price, qty, line_total, size, color FROM order_lines WHERE order_id = ? ORDER BY id", (draft["order_id"],))
         address = query("SELECT name, line, city, country, billing_same FROM order_address WHERE order_id = ?", (draft["order_id"],))
     else:
-        lines = query("SELECT id, title, price, qty, line_total FROM draft_lines WHERE draft_id = ? ORDER BY id", (draft_id,))
+        lines = query("SELECT id, title, price, qty, line_total, size, color FROM draft_lines WHERE draft_id = ? ORDER BY id", (draft_id,))
         address = []
     if not lines and draft["total"]:
-        lines = [{"id": 0, "title": "Draft items", "price": draft["total"], "qty": 1, "line_total": draft["total"]}]
+        lines = [{"id": 0, "title": "Draft items", "price": draft["total"], "qty": 1, "line_total": draft["total"], "size": "", "color": ""}]
     if not address:
         person = query("SELECT location FROM customers WHERE name = ?", (draft["customer"],))
         city = person[0]["location"] if person else "Nairobi"
@@ -70,7 +70,7 @@ def load_draft(draft_id):
         "rank": 2,
     })
     events.sort(key=lambda event: (event["created_at"], -event["rank"]), reverse=True)
-    people = query("SELECT email, location FROM customers WHERE name = ?", (draft["customer"],))
+    people = query("SELECT email, phone, address, location FROM customers WHERE name = ?", (draft["customer"],))
     count = query("SELECT COUNT(*) AS n FROM orders WHERE customer = ?", (draft["customer"],))[0]["n"]
     total = draft["total"]
     discount = int(draft.get("discount") or 0)
@@ -85,7 +85,9 @@ def load_draft(draft_id):
         "address": address[0],
         "customer": {
             "name": draft["customer"],
-            "email": people[0]["email"] if people else "",
+            "email": draft.get("email") or (people[0]["email"] if people else ""),
+            "phone": draft.get("phone") or (people[0]["phone"] if people else ""),
+            "address": draft.get("address") or (people[0]["address"] if people else "") or (f"{people[0]['location']}, Kenya" if people and people[0]["location"] else ""),
             "location": people[0]["location"] if people else "",
             "orders": count,
         },
@@ -129,7 +131,14 @@ def money_fields(body):
             return None
         if price < 0 or qty < 1:
             return None
-        lines.append({"title": title, "price": price, "qty": qty, "line_total": price * qty})
+        lines.append({
+            "title": title,
+            "price": price,
+            "qty": qty,
+            "line_total": price * qty,
+            "size": str(item.get("size") or "").strip()[:40],
+            "color": str(item.get("color") or "").strip()[:40],
+        })
     subtotal = sum(line["line_total"] for line in lines)
     if "total" in body and not lines:
         try:
@@ -149,6 +158,9 @@ def money_fields(body):
         "note": str(body.get("note") or "").strip(),
         "tags": str(body.get("tags") or "").strip(),
         "currency": currency,
+        "phone": str(body.get("phone") or "").strip()[:40],
+        "email": str(body.get("email") or "").strip()[:120],
+        "address": str(body.get("address") or "").strip()[:200],
     }
 
 
@@ -166,9 +178,9 @@ def create_draft():
     with connect() as db:
         draft_id = next_draft_id(db)
         db.execute(
-            """INSERT INTO drafts (id, po, created_at, customer, status, total, note, tags, discount, shipping, currency)
-               VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)""",
-            (draft_id, po, created, customer, fields["total"], fields["note"], fields["tags"], fields["discount"], fields["shipping"], fields["currency"]),
+            """INSERT INTO drafts (id, po, created_at, customer, status, total, note, tags, discount, shipping, currency, phone, email, address)
+               VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (draft_id, po, created, customer, fields["total"], fields["note"], fields["tags"], fields["discount"], fields["shipping"], fields["currency"], fields["phone"], fields["email"], fields["address"]),
         )
         if fields["lines"]:
             copy_draft_lines(db, draft_id, fields["lines"])
@@ -219,11 +231,12 @@ def draft_action(draft_id):
         elif action == "duplicate":
             opened = next_draft_id(db)
             db.execute(
-                """INSERT INTO drafts (id, po, created_at, customer, status, total, note, tags, discount, shipping, currency)
-                   VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO drafts (id, po, created_at, customer, status, total, note, tags, discount, shipping, currency, phone, email, address)
+                   VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     opened, draft["po"], datetime.now().replace(microsecond=0).isoformat(), draft["customer"], draft["total"],
                     draft.get("note") or "", draft.get("tags") or "", draft.get("discount") or 0, draft.get("shipping") or 0, draft.get("currency") or "KES",
+                    draft.get("phone") or "", draft.get("email") or "", draft.get("address") or "",
                 ),
             )
             copy_draft_lines(db, opened, draft_source_lines(db, draft))
@@ -253,8 +266,8 @@ def draft_action(draft_id):
             db.execute("DELETE FROM order_lines WHERE order_id = ? AND title = 'Order items'", (opened,))
             for line in draft_source_lines(db, draft):
                 db.execute(
-                    "INSERT INTO order_lines (order_id, title, price, qty, line_total) VALUES (?, ?, ?, ?, ?)",
-                    (opened, line["title"], line["price"], line["qty"], line["line_total"]),
+                    "INSERT INTO order_lines (order_id, title, price, qty, line_total, size, color) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (opened, line["title"], line["price"], line["qty"], line["line_total"], line.get("size") or "", line.get("color") or ""),
                 )
             if payment == "paid":
                 add_paid = f"You marked draft #{draft_id} as paid."
