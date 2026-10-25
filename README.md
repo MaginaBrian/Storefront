@@ -156,7 +156,9 @@ Products, collections, inventory, purchase orders, transfers, and gift cards are
 
 Hosting is one Render web service defined in `render.yaml`. Docker builds the React admin, then Gunicorn serves that build and the Flask API on the same origin, so the screens keep calling `/api/...`. GitHub Actions (`.github/workflows/ci.yml`) installs both sides, builds the admin, and runs `backend/smoke.py`. Render deploys `main` only after that check passes.
 
-The database file on Render is `/var/data/storefront.db` (`STOREFRONT_DB`). A disk keeps it across deploys. The first boot copies the committed `backend/storefront.db` onto that disk when the disk is empty. Later deploys leave the disk file in place and only run the schema migration. Locally, leave `STOREFRONT_DB` unset and the API keeps using `backend/storefront.db`.
+The service uses Render's free instance. That plan has no persistent disk, so `STOREFRONT_DB` points at `/tmp/storefront.db`. Each boot copies the committed `backend/storefront.db` there when the file is missing. Orders and other records created in the hosted admin last until the next deploy, restart, or spin-down, and then the committed store comes back. Locally, leave `STOREFRONT_DB` unset and the API keeps using `backend/storefront.db`.
+
+A free instance also sleeps after about 15 minutes without a request. The next visit waits about a minute while it starts again.
 
 The service has no login. Anyone with the Render URL can use the admin and the API.
 
@@ -164,7 +166,7 @@ To create it:
 
 1. Push `main` to GitHub.
 2. In Render, choose **New → Blueprint** and pick this repository.
-3. Apply the blueprint. Render reads `render.yaml`, creates the `piaci` service in Frankfurt on the smallest paid instance (half a CPU and 512 MB of memory), and attaches a 1 GB disk. The disk is why it is not the free instance, and the service stays at one instance because a disk cannot be shared.
+3. Apply the blueprint. Render reads `render.yaml` and creates the `piaci` service in Frankfurt on the free plan. Close the payment dialog if it is still open from the earlier paid plan, then click **Retry** after this file is on `main`.
 
 `GET /api/health` is the Render health check. It returns `{ "ok": true }`.
 

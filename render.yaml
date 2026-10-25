@@ -1,13 +1,14 @@
 # Render Blueprint. Connect this repo in the dashboard with New → Blueprint.
-# Deploys wait for the GitHub Actions CI check, then ship one web service.
-# The disk keeps SQLite across restarts. Disks need a paid instance and
-# cannot be shared, so this service stays at one instance.
+# Deploys wait for the GitHub Actions CI check, then ship one free web service.
+# Free instances have no disk. The database is the committed storefront.db,
+# copied into /tmp on each boot. Records added in the admin last until Render
+# restarts or spins the service down.
 services:
   - type: web
     name: piaci
     runtime: docker
     branch: main
-    plan: 0.5c-512mb
+    plan: free
     region: frankfurt
     numInstances: 1
     dockerfilePath: ./Dockerfile
@@ -16,10 +17,6 @@ services:
     autoDeployTrigger: checksPass
     envVars:
       - key: STOREFRONT_DB
-        value: /var/data/storefront.db
+        value: /tmp/storefront.db
       - key: PYTHONUNBUFFERED
         value: "1"
-    disk:
-      name: piaci-data
-      mountPath: /var/data
-      sizeGB: 1
