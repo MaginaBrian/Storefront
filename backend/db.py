@@ -1,8 +1,9 @@
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent / "storefront.db"
+DB_PATH = Path(os.environ["STOREFRONT_DB"]) if os.environ.get("STOREFRONT_DB") else Path(__file__).resolve().parent / "storefront.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS orders (
@@ -302,8 +303,10 @@ CREATE TABLE IF NOT EXISTS gift_cards (
 """
 
 def connect():
-    conn = sqlite3.connect(DB_PATH)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
