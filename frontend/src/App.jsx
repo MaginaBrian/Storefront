@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, FileText, Globe, Inbox, Moon, Search, Sun, Tag, TrendingUp, Users } from 'lucide-react'
+import { BarChart3, Globe, Inbox, Moon, Search, Sun, Tag, Users } from 'lucide-react'
 import CatalogSection from './catalog/index.jsx'
 import Home from './home/Home.jsx'
 import { useApi } from './lib/api.js'
-import { ANALYTICS_VIEWS, CHANNELS, CONTENT_VIEWS, CUSTOMER_VIEWS, GROWTH_VIEWS, MARKET_VIEWS, NAV, PRODUCT_VIEWS, SETTINGS, readRoute } from './nav.js'
+import { ANALYTICS_VIEWS, CHANNELS, CUSTOMER_VIEWS, MARKET_VIEWS, NAV, PRODUCT_VIEWS, SETTINGS, readRoute } from './nav.js'
 import OrdersSection from './orders/index.jsx'
 import { AgenticPage, Analytics, Attribution, Autopilot, BlogPosts, Campaigns, Catalogs, Companies, Content, Customers, Discounts, Files, LiveView, Markets, Menus, Metaobjects, Products, Reports, Rollouts, Segments, Settings as SettingsPage, StorePage } from './pages/index.js'
 
@@ -81,10 +81,8 @@ export default function App() {
   const ordersOpen = view === 'orders' || view === 'drafts' || view === 'checkouts'
   const productsOpen = view === 'products' || PRODUCT_VIEWS.includes(view)
   const customersOpen = view === 'customers' || CUSTOMER_VIEWS.includes(view)
-  const contentOpen = view === 'content' || CONTENT_VIEWS.includes(view)
   const marketsOpen = view === 'markets' || MARKET_VIEWS.includes(view)
   const analyticsOpen = view === 'analytics' || ANALYTICS_VIEWS.includes(view)
-  const growthOpen = view === 'growth' || GROWTH_VIEWS.includes(view)
   return (
     <div className="shell">
       <aside>
@@ -132,29 +130,6 @@ export default function App() {
             {customersOpen && <>
               <button className={`sub ${view === 'segments' ? 'on' : ''}`} onClick={() => setView('segments')}>Segments</button>
               <button className={`sub ${view === 'companies' ? 'on' : ''}`} onClick={() => setView('companies')}>Companies</button>
-            </>}
-          </div>
-        ) : entry.id === 'growth' ? (
-          <div key="growth" className="nest">
-            <button className={`nav ${view === 'growth' ? 'on' : ''}`} onClick={() => setView('attribution')}>
-              <TrendingUp size={17} strokeWidth={1.6} />Growth
-            </button>
-            {growthOpen && <>
-              <button className={`sub ${view === 'attribution' || view === 'growth' ? 'on' : ''}`} onClick={() => setView('attribution')}>Attribution</button>
-              <button className={`sub ${view === 'autopilot' ? 'on' : ''}`} onClick={() => setView('autopilot')}>Autopilot</button>
-              <button className={`sub ${view === 'campaigns' ? 'on' : ''}`} onClick={() => setView('campaigns')}>Campaigns</button>
-            </>}
-          </div>
-        ) : entry.id === 'content' ? (
-          <div key="content" className="nest">
-            <button className={`nav ${view === 'content' ? 'on' : ''}`} onClick={() => setView('content')}>
-              <FileText size={17} strokeWidth={1.6} />Content
-            </button>
-            {contentOpen && <>
-              <button className={`sub ${view === 'metaobjects' ? 'on' : ''}`} onClick={() => setView('metaobjects')}>Metaobjects</button>
-              <button className={`sub ${view === 'files' ? 'on' : ''}`} onClick={() => setView('files')}>Files</button>
-              <button className={`sub ${view === 'menus' ? 'on' : ''}`} onClick={() => setView('menus')}>Menus</button>
-              <button className={`sub ${view === 'blog-posts' ? 'on' : ''}`} onClick={() => setView('blog-posts')}>Blog posts</button>
             </>}
           </div>
         ) : entry.id === 'markets' ? (

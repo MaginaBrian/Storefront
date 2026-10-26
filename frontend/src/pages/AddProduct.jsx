@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bold, ChevronDown, ChevronLeft, Image, Italic, Link2, List, Plus, Smile, Underline, X } from 'lucide-react'
+import { Bold, Check, ChevronDown, ChevronLeft, ChevronRight, Image, Italic, Link2, List, Plus, Search, Smile, Underline, X } from 'lucide-react'
 import { useJson } from '../lib/api.js'
 import { money } from '../lib/money.js'
 
-const CATEGORIES = ['Shirts', 'T-Shirts', 'Bags', 'Accessories', 'Vests', 'Activewear', 'Fabric']
+const CLOTHING = ['Activewear', 'Dresses', 'One-Pieces', 'Outerwear', 'Outfit Sets', 'Pants', 'Shorts', 'Skirts']
+const VARIANT_OPTIONS = ['Color', 'Size', 'Fabric']
+const VARIANT_HINTS = { Color: 'Black, White, Navy', Size: 'XS, S, M, L, XL', Fabric: 'Cotton, Linen, Wool' }
 const TYPES = ['Shirt', 'Bag', 'Accessory', 'Vest']
 
 function cents(value) {
@@ -27,6 +29,9 @@ export default function AddProduct({ onOpen, gift = false }) {
   const [description, setDescription] = useState('')
   const [media, setMedia] = useState('')
   const [category, setCategory] = useState('')
+  const [categoryOpen, setCategoryOpen] = useState(false)
+  const [categoryQuery, setCategoryQuery] = useState('')
+  const [inClothing, setInClothing] = useState(true)
   const [status, setStatus] = useState('active')
   const [channels, setChannels] = useState(true)
   const [productType, setProductType] = useState('')
@@ -49,16 +54,11 @@ export default function AddProduct({ onOpen, gift = false }) {
   const [sku, setSku] = useState('')
   const [barcode, setBarcode] = useState('')
   const [continueSelling, setContinueSelling] = useState(false)
-  const [physical, setPhysical] = useState(true)
-  const [length, setLength] = useState('0.0')
-  const [width, setWidth] = useState('0.0')
-  const [height, setHeight] = useState('0.0')
-  const [weight, setWeight] = useState('0.0')
-  const [country, setCountry] = useState('')
-  const [hsCode, setHsCode] = useState('')
   const [options, setOptions] = useState([])
   const [optionOpen, setOptionOpen] = useState(false)
-  const [optionName, setOptionName] = useState('Size')
+  const [optionQuery, setOptionQuery] = useState('')
+  const [optionName, setOptionName] = useState('')
+  const [customOption, setCustomOption] = useState(false)
   const [optionValues, setOptionValues] = useState('')
   const [fields, setFields] = useState([])
   const [defining, setDefining] = useState(false)
@@ -70,10 +70,9 @@ export default function AddProduct({ onOpen, gift = false }) {
   const dirty = useMemo(() => Boolean(
     title.trim() !== (gift ? 'Gift card' : '') || description || media || category || productType || vendor || chosen.length || tags.length
     || price || compareAt || unitPrice || cost || sku || barcode || options.length || fields.length
-    || quantity !== '0' || !tracked || !physical || !chargeTax || continueSelling || !channels
-    || length !== '0.0' || width !== '0.0' || height !== '0.0' || weight !== '0.0' || country || hsCode
+    || quantity !== '0' || !tracked || !chargeTax || continueSelling || !channels
     || theme !== 'Default product' || status !== 'active',
-  ), [gift, title, description, media, category, productType, vendor, chosen, tags, price, compareAt, unitPrice, cost, sku, barcode, options, fields, quantity, tracked, physical, chargeTax, continueSelling, channels, length, width, height, weight, country, hsCode, theme, status])
+  ), [gift, title, description, media, category, productType, vendor, chosen, tags, price, compareAt, unitPrice, cost, sku, barcode, options, fields, quantity, tracked, chargeTax, continueSelling, channels, theme, status])
 
   useEffect(() => { setError('') }, [title, price])
 
@@ -90,8 +89,11 @@ export default function AddProduct({ onOpen, gift = false }) {
     event.preventDefault()
     const values = optionValues.split(',').map(part => part.trim()).filter(Boolean)
     if (!optionName.trim() || !values.length) return
-    setOptions(current => [...current, { name: optionName.trim(), values }])
+    setOptions(current => current.some(option => option.name === optionName.trim()) ? current : [...current, { name: optionName.trim(), values }])
     setOptionValues('')
+    setOptionName('')
+    setCustomOption(false)
+    setOptionQuery('')
     setOptionOpen(false)
   }
 
@@ -101,7 +103,6 @@ export default function AddProduct({ onOpen, gift = false }) {
     const stock = Number(quantity)
     if (!title.trim()) { setError('Enter a title.'); return }
     if (priceCents == null || !Number.isInteger(stock) || stock < 0) { setError('Enter a valid price and quantity.'); return }
-    const weightKg = Number(weight)
     setBusy(true)
     fetch('/api/products', {
       method: 'POST',
@@ -128,13 +129,8 @@ export default function AddProduct({ onOpen, gift = false }) {
           barcode,
           tracked,
           continue_selling: continueSelling,
-          physical,
           channels,
-          package: 'Store default · Sample box · 22 × 13.7 × 4.2 cm, 0 kg',
-          length, width, height,
-          weight_kg: weight,
-          weight_g: Number.isFinite(weightKg) ? Math.round(weightKg * 1000) : 0,
-          country, hs_code: hsCode, theme,
+          theme,
           options,
           variant: options[0]?.values?.[0] || 'Default',
         },
@@ -214,12 +210,40 @@ export default function AddProduct({ onOpen, gift = false }) {
           </section>
 
           <section className="detail-card">
-            <label className="field">Category
-              <select value={category} onChange={e => setCategory(e.target.value)}>
-                <option value="">Choose a product category</option>
-                {CATEGORIES.map(item => <option key={item}>{item}</option>)}
-              </select>
-            </label>
+            <div className="field category-picker">
+              <span>Category</span>
+              <button type="button" className="category-input" onClick={() => setCategoryOpen(open => !open)}>
+                <span className={category ? '' : 'muted'}>{category || 'Choose a product category'}</span>
+                <ChevronDown size={14} />
+              </button>
+              {categoryOpen && (
+                <div className="category-menu">
+                  <label className="category-search">
+                    <Search size={14} />
+                    <input aria-label="Search categories" placeholder="Search categories" value={categoryQuery} onChange={e => setCategoryQuery(e.target.value)} />
+                  </label>
+                  {inClothing && !categoryQuery.trim() && (
+                    <button type="button" onClick={() => setInClothing(false)}><ChevronLeft size={14} /> Back to Apparel & Accessories</button>
+                  )}
+                  {(inClothing || categoryQuery.trim()) && (
+                    <button type="button" className={category === 'Clothing' ? 'on' : ''} onClick={() => setCategory('Clothing')}>
+                      <span>{category === 'Clothing' && <Check size={14} />} Clothing</span>
+                    </button>
+                  )}
+                  {!inClothing && !categoryQuery.trim() && (
+                    <button type="button" onClick={() => setInClothing(true)}>
+                      <span>Clothing</span>
+                      <ChevronRight size={14} />
+                    </button>
+                  )}
+                  {(inClothing || categoryQuery.trim()) && CLOTHING.filter(item => item.toLowerCase().includes(categoryQuery.trim().toLowerCase())).map(item => (
+                    <button type="button" key={item} className={category === item ? 'on' : ''} onClick={() => setCategory(item)}>
+                      <span>{category === item && <Check size={14} />} {item}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <p className="muted">Determines tax rates and adds metafields to improve search, filters, and cross-channel sales.</p>
           </section>
 
@@ -276,55 +300,34 @@ export default function AddProduct({ onOpen, gift = false }) {
           </section>
 
           <section className="detail-card">
-            <div className="card-title">
-              <h2>Shipping</h2>
-              <span className="card-tools">Physical product <Switch on={physical} label="Physical product" onClick={() => setPhysical(v => !v)} /></span>
-            </div>
-            {physical && (
-              <>
-                <label className="field">Package when shipped alone
-                  <select defaultValue="sample">
-                    <option value="sample">Store default · Sample box · 22 × 13.7 × 4.2 cm, 0 kg</option>
-                  </select>
-                </label>
-                <p className="field-label">Packed product size</p>
-                <div className="dims">
-                  <input aria-label="Length" value={length} onChange={e => setLength(e.target.value)} />
-                  <span>×</span>
-                  <input aria-label="Width" value={width} onChange={e => setWidth(e.target.value)} />
-                  <span>×</span>
-                  <input aria-label="Height" value={height} onChange={e => setHeight(e.target.value)} />
-                  <span className="muted">cm</span>
-                </div>
-                <label className="field">Weight
-                  <span className="weight-row">
-                    <input inputMode="decimal" aria-label="Weight" value={weight} onChange={e => setWeight(e.target.value)} />
-                    <span className="muted">kg</span>
-                  </span>
-                </label>
-                <div className="orders-actions">
-                  <button type="button" className="ghost" onClick={() => setCountry(country ? '' : 'Kenya')}>{country ? `Country of origin · ${country}` : 'Country of origin'}</button>
-                  <button type="button" className="ghost" onClick={() => setHsCode(hsCode ? '' : '6205')}>{hsCode ? `HS Code · ${hsCode}` : 'HS Code'}</button>
-                </div>
-              </>
-            )}
-          </section>
-
-          <section className="detail-card">
             <h2>Variants</h2>
             {options.map(option => (
               <p key={option.name} className="pinned-field">{option.name}: {option.values.join(', ')}
                 <button type="button" className="icon-btn" aria-label={`Remove ${option.name}`} onClick={() => setOptions(current => current.filter(item => item.name !== option.name))}><X size={12} /></button>
               </p>
             ))}
-            {optionOpen ? (
+            {optionOpen && (optionName || customOption) ? (
               <div className="tag-form">
-                <input aria-label="Option name" value={optionName} onChange={e => setOptionName(e.target.value)} placeholder="Size" />
-                <input aria-label="Option values" value={optionValues} onChange={e => setOptionValues(e.target.value)} placeholder="S, M, L" />
+                {customOption
+                  ? <input aria-label="Option name" value={optionName} onChange={e => setOptionName(e.target.value)} placeholder="Option name" />
+                  : <strong>{optionName}</strong>}
+                <input aria-label="Option values" value={optionValues} onChange={e => setOptionValues(e.target.value)} placeholder={VARIANT_HINTS[optionName] || 'Values, separated by commas'} />
                 <button type="button" className="solid" onClick={addOption}>Done</button>
               </div>
+            ) : optionOpen ? (
+              <div className="category-menu">
+                <label className="category-search">
+                  <Search size={14} />
+                  <input aria-label="Search options" placeholder="Search" value={optionQuery} onChange={e => setOptionQuery(e.target.value)} />
+                </label>
+                <p className="muted">Recommended</p>
+                {VARIANT_OPTIONS.filter(name => name.toLowerCase().includes(optionQuery.trim().toLowerCase()) && !options.some(option => option.name === name)).map(name => (
+                  <button type="button" key={name} onClick={() => { setOptionName(name); setCustomOption(false) }}>{name}</button>
+                ))}
+                <button type="button" onClick={() => { setCustomOption(true); setOptionName('') }}><Plus size={14} /> Create custom option</button>
+              </div>
             ) : (
-              <button type="button" className="text-link" onClick={() => setOptionOpen(true)}><Plus size={14} /> Add options like size or color</button>
+              <button type="button" className="text-link" onClick={() => { setOptionOpen(true); setOptionName(''); setCustomOption(false); setOptionQuery('') }}><Plus size={14} /> Add options like size or color</button>
             )}
           </section>
 

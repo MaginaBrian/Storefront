@@ -1,5 +1,5 @@
 import {
-  BarChart3, FileText, Globe, House, Inbox, Percent, Settings, Sparkles, Store, Tag, TrendingUp, Users,
+  BarChart3, Globe, House, Inbox, Percent, Settings, Sparkles, Store, Tag, Users,
 } from 'lucide-react'
 
 export const NAV = [
@@ -7,9 +7,7 @@ export const NAV = [
   { id: 'orders', label: 'Orders', icon: Inbox },
   { id: 'products', label: 'Products', icon: Tag },
   { id: 'customers', label: 'Customers', icon: Users },
-  { id: 'growth', label: 'Growth', icon: TrendingUp },
   { id: 'discounts', label: 'Discounts', icon: Percent },
-  { id: 'content', label: 'Content', icon: FileText },
   { id: 'markets', label: 'Markets', icon: Globe },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ]

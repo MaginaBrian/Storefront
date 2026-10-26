@@ -201,6 +201,15 @@ tr.picked td { background: #eef0ff; }
 .product-head .ghost, .editor-bar button, .file-btn { display: inline-flex; align-items: center; gap: 6px; }
 .field { display: grid; gap: 6px; margin-top: 12px; font-weight: 600; }
 .field input, .field select, .field textarea, .order-side select, .category-input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 400; color: var(--text); background: #fff; }
+.category-picker { position: relative; }
+.category-input { display: flex; align-items: center; justify-content: space-between; text-align: left; }
+.category-menu { margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 8px; box-shadow: 0 12px 40px rgba(20, 16, 40, .12); }
+.category-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; }
+.category-search input { border: 0; padding: 0; width: 100%; outline: 0; background: transparent; }
+.category-menu > button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px; }
+.category-menu > button span { display: inline-flex; align-items: center; gap: 8px; }
+.category-menu > button:hover, .category-menu > button.on { background: #f3f3f8; }
+.category-menu .muted { padding: 6px 10px 2px; }
 .editor { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .editor-bar { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px; border-bottom: 1px solid var(--line); background: #fafafd; }
 .editor-bar button { padding: 4px 6px; border-radius: 6px; color: #44485f; }
