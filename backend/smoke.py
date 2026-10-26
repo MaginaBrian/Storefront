@@ -27,6 +27,36 @@ def main():
         assert asset.status_code == 200
         missing = client.get("/api/does-not-exist")
         assert missing.status_code == 404
+    created = client.post("/api/integrations/cosine", json={
+        "ref": "CC-9001",
+        "customer": "MWOTAJI",
+        "contact": "Muli",
+        "email": "mwotaji@cosinecreate.com",
+        "phone": "+254710314337",
+        "created_at": "2026-10-25T18:00:00+00:00",
+        "lines": [
+            {"title": "Oversized T-shirt", "size": "L", "color": "Black", "qty": 2, "price": 0},
+            {"title": "B1976 (kg)", "size": "", "color": "Black", "qty": 3, "price": 126700},
+        ],
+    })
+    assert created.status_code == 201, created.status_code
+    body = created.get_json()
+    assert body["total"] == 380100
+    assert body["items"] == 5
+    assert body["external_ref"] == "CC-9001"
+    again = client.post("/api/integrations/cosine", json={
+        "ref": "CC-9001",
+        "customer": "MWOTAJI",
+        "email": "mwotaji@cosinecreate.com",
+        "phone": "+254710314337",
+        "lines": [{"title": "Oversized T-shirt", "size": "M", "color": "Black", "qty": 4, "price": 0}],
+    })
+    assert again.status_code == 200
+    assert again.get_json()["items"] == 4
+    assert again.get_json()["total"] == 0
+    removed = client.delete("/api/integrations/cosine/CC-9001")
+    assert removed.status_code == 200
+    assert removed.get_json()["removed"] is True
     print("smoke ok")
 
 

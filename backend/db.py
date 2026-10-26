@@ -440,6 +440,8 @@ def migrate(db):
     _add_col(db, "draft_lines", "color", "TEXT NOT NULL DEFAULT ''")
     _add_col(db, "order_lines", "size", "TEXT NOT NULL DEFAULT ''")
     _add_col(db, "order_lines", "color", "TEXT NOT NULL DEFAULT ''")
+    _add_col(db, "orders", "external_ref", "TEXT")
+    _add_col(db, "products", "extra", "TEXT NOT NULL DEFAULT '{}'")
 
 
 def init_db():

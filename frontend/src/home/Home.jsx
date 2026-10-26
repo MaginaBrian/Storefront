@@ -1,3 +1,4 @@
+import { useLayoutEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useApi } from '../lib/api.js'
 
@@ -23,76 +24,124 @@ function Donut({ data }) {
   )
 }
 
+function figure(value, t) {
+  const text = String(value ?? '')
+  if (t >= 1) return text
+  const match = text.match(/^(.*?)(\d[\d,.]*)(.*)$/)
+  if (!match) return text
+  const raw = match[2].replace(/,/g, '')
+  const num = Number(raw)
+  if (!Number.isFinite(num)) return text
+  const decimals = (raw.split('.')[1] || '').length
+  const current = num * t
+  const shown = match[2].includes(',')
+    ? current.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+    : (decimals ? current.toFixed(decimals) : String(Math.round(current)))
+  return `${match[1]}${shown}${match[3]}`
+}
+
+function ease(p, start) {
+  const x = Math.min(1, Math.max(0, (p - start) / (1 - start)))
+  return 1 - (1 - x) ** 3
+}
+
 export default function Home({ onOpen }) {
   const [d] = useApi('/api/dashboard')
-  if (!d) return null
+  const [p, setP] = useState(0)
+  const [grown, setGrown] = useState(false)
+  useLayoutEffect(() => {
+    if (!d) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduce) { setP(1); setGrown(true); return }
+    setP(0)
+    setGrown(false)
+    const start = performance.now()
+    let raf = 0
+    const tick = now => {
+      const next = Math.min(1, (now - start) / 1300)
+      setP(next)
+      if (next < 1) raf = requestAnimationFrame(tick)
+    }
+    const grow = requestAnimationFrame(() => setGrown(true))
+    raf = requestAnimationFrame(tick)
+    return () => { cancelAnimationFrame(raf); cancelAnimationFrame(grow) }
+  }, [d])
+  const kpis = d?.kpis || [0, 1, 2, 3].map(i => ({ label: '', value: '0', note: '', good: true, tone: ['green', 'amber', 'violet', 'red'][i] }))
+  const week = d?.week || Array.from({ length: 7 }, () => ['', 0])
+  const openKpi = label => onOpen(label === 'Orders' ? 'orders' : label === 'New customers' ? 'customers' : label === 'Low stock' ? 'products' : 'analytics', label === 'Low stock' ? { stock: 'low' } : undefined)
   return (
-    <>
-      <div className="page-head">
+    <div className="dash">
+      <div className="page-head rise" style={{ animationDelay: '0ms' }}>
         <h1 className="title">Sales performance</h1>
         <button className="cta" onClick={() => onOpen('products', { add: '1' })}><Plus size={15} /> Add product</button>
       </div>
       <section className="kpis">
-        {d.kpis.map(k => (
-          <button type="button" className="card kpi" key={k.label} onClick={() => onOpen(k.label === 'Orders' ? 'orders' : k.label === 'New customers' ? 'customers' : k.label === 'Low stock' ? 'products' : 'analytics', k.label === 'Low stock' ? { stock: 'low' } : undefined)}>
-            <div className="kpi-top"><span>{k.label}</span><i style={{ background: TONES[k.tone][0], color: TONES[k.tone][1] }} /></div>
-            <div className="kpi-val"><strong>{k.value}</strong><em className={k.good ? 'up' : 'down'}>{k.note}</em></div>
-          </button>
-        ))}
+        {kpis.map((k, i) => {
+          const step = ease(p, i * 0.08)
+          return (
+            <button type="button" className="card kpi rise" key={k.label || i} style={{ animationDelay: `${i * 70}ms` }} onClick={d ? () => openKpi(k.label) : undefined}>
+              <div className="kpi-top"><span>{k.label}</span><i style={{ background: TONES[k.tone][0], color: TONES[k.tone][1] }} /></div>
+              <div className="kpi-val"><strong>{figure(k.value, step)}</strong>{k.note && <em className={k.good ? 'up' : 'down'} style={{ opacity: step }}>{k.note}</em>}</div>
+            </button>
+          )
+        })}
       </section>
       <section className="row two">
-        <div className="card">
+        <div className="card rise" style={{ animationDelay: '160ms' }}>
           <h3>Sales by channel</h3>
           <div className="channels">
-            <Donut data={d.channels} />
+            {d && <Donut data={d.channels} />}
             <ul>
-              {d.channels.map((c, i) => (
-                <li key={c.name}>
-                  <button type="button" className="channel-hit" onClick={() => onOpen('orders', { channel: c.name })}>
-                  <b style={{ background: SHADES[i] }} />
-                  <div><span>{c.name}</span><strong>KES {c.sales.toLocaleString()}</strong></div>
-                  <div className="r"><span>{c.orders} orders</span><em className={c.delta > 0 ? 'up' : 'down'}>{Math.abs(c.delta)}%</em></div>
-                  </button>
-                </li>
-              ))}
+              {(d?.channels || []).map((c, i) => {
+                const step = ease(p, 0.12 + i * 0.04)
+                return (
+                  <li key={c.name}>
+                    <button type="button" className="channel-hit" onClick={() => onOpen('orders', { channel: c.name })}>
+                    <b style={{ background: SHADES[i] }} />
+                    <div><span>{c.name}</span><strong>{figure(`KES ${c.sales.toLocaleString('en-US')}`, step)}</strong></div>
+                    <div className="r"><span>{figure(c.orders, step)} orders</span><em className={c.delta > 0 ? 'up' : 'down'}>{Math.abs(c.delta)}%</em></div>
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           </div>
         </div>
-        <div className="card">
+        <div className="card rise" style={{ animationDelay: '240ms' }}>
           <h3>This week</h3>
           <div className="bars">
-            {d.week.map(([day, v], i) => (
-              <div key={day}><span className={i === 6 ? 'bar hot' : 'bar'} style={{ height: `${v}%` }} /><small>{day}</small></div>
+            {week.map(([day, v], i) => (
+              <div key={day || i}><span className={i === 6 ? 'bar hot' : 'bar'} style={{ height: grown ? `${v}%` : '0%', transitionDelay: `${180 + i * 55}ms` }} /><small>{day}</small></div>
             ))}
           </div>
         </div>
       </section>
       <section className="row two b">
-        <div className="card">
+        <div className="card rise" style={{ animationDelay: '300ms' }}>
           <div className="between"><h3>Recent orders</h3><button className="btn" onClick={() => onOpen('orders')}>View all</button></div>
           <table>
             <thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
             <tbody>
-              {d.recent.map(r => (
-                <tr key={r.id} className="clickable" onClick={() => onOpen('orders', { order: r.id })}>
+              {(d?.recent || []).map((r, i) => (
+                <tr key={r.id} className="clickable rise-row" style={{ animationDelay: `${360 + i * 80}ms` }} onClick={() => onOpen('orders', { order: r.id })}>
                   <td>#{r.id}</td>
                   <td><button type="button" className="text-link" onClick={e => { e.stopPropagation(); onOpen('customers', { customer: r.customer }) }}>{r.customer}</button></td>
-                  <td>{r.date}</td><td>{r.amount}</td>
+                  <td>{r.date}</td><td>{figure(r.amount, ease(p, 0.2 + i * 0.06))}</td>
                   <td><span className={`pill ${r.status.toLowerCase()}`}>{r.status}</span></td></tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="card">
+        <div className="card rise" style={{ animationDelay: '380ms' }}>
           <h3>Top products</h3>
           <ul className="top">
-            {d.top.map((t, i) => (
-              <li key={t.title}><button type="button" className="top-hit" onClick={() => onOpen('products', { product: t.title })}><b style={{ background: SHADES[i % 4] }}>{t.title[0]}</b>
-                <div><strong>{t.title}</strong><small>{t.sold} units sold</small></div><span>{t.sales}</span></button></li>
+            {(d?.top || []).map((t, i) => (
+              <li key={t.title} className="rise-row" style={{ animationDelay: `${420 + i * 80}ms` }}><button type="button" className="top-hit" onClick={() => onOpen('products', { product: t.title })}><b style={{ background: SHADES[i % 4] }}>{t.title[0]}</b>
+                <div><strong>{t.title}</strong><small>{figure(t.sold, ease(p, 0.18 + i * 0.06))} units sold</small></div><span>{figure(t.sales, ease(p, 0.18 + i * 0.06))}</span></button></li>
             ))}
           </ul>
         </div>
       </section>
-    </>
+    </div>
   )
 }

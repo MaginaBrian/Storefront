@@ -215,3 +215,82 @@ html[data-theme="dark"] .discount-search input,
 html[data-theme="dark"] .detail-card input:not([type="radio"]):not([type="checkbox"]),
 html[data-theme="dark"] .detail-card select { background: var(--card); }
 
+main.home-stage {
+  background:
+    radial-gradient(540px 300px at 22% 10%, color-mix(in srgb, #8b94e8 70%, transparent), transparent 72%),
+    radial-gradient(460px 280px at 86% 16%, color-mix(in srgb, var(--green) 42%, transparent), transparent 70%),
+    radial-gradient(520px 340px at 58% 78%, color-mix(in srgb, #5b6bd1 36%, transparent), transparent 74%),
+    linear-gradient(165deg, #e7e9f8, #f4f5fb 42%, #eef3f0);
+}
+.dash, .dash .row, .dash .card { min-width: 0; }
+.dash .card {
+  overflow: auto;
+  background: color-mix(in srgb, #fff 46%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 78%, transparent);
+  border-radius: 22px;
+  box-shadow: inset 0 1px 0 #fff, 0 14px 36px color-mix(in srgb, var(--indigo) 14%, transparent);
+  backdrop-filter: blur(22px) saturate(1.45);
+}
+.dash .kpi:hover { background: color-mix(in srgb, #fff 64%, transparent); }
+.dash .btn {
+  background: color-mix(in srgb, #fff 40%, transparent);
+  border-color: color-mix(in srgb, #fff 62%, var(--line));
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+}
+.dash th { background: color-mix(in srgb, #fff 28%, transparent); }
+.dash .top li {
+  background: color-mix(in srgb, #fff 28%, transparent);
+  border-color: color-mix(in srgb, #fff 60%, var(--line));
+  border-radius: 16px;
+}
+.dash .channel-hit:hover,
+.dash .top-hit:hover { background: color-mix(in srgb, var(--indigo) 8%, transparent); }
+.dash .bars {
+  background: repeating-linear-gradient(color-mix(in srgb, var(--indigo) 14%, transparent) 0 1px, transparent 1px 28px);
+  border-radius: 14px;
+}
+html[data-theme="dark"] main.home-stage {
+  background:
+    radial-gradient(560px 320px at 24% 8%, color-mix(in srgb, #6d78d6 62%, transparent), transparent 70%),
+    radial-gradient(440px 280px at 90% 14%, color-mix(in srgb, var(--green) 48%, transparent), transparent 72%),
+    radial-gradient(520px 360px at 62% 82%, color-mix(in srgb, #8b94e8 34%, transparent), transparent 74%),
+    linear-gradient(165deg, #1a1e2e, #12141c 58%, #121816);
+}
+html[data-theme="dark"] .dash .card {
+  background: color-mix(in srgb, #fff 9%, transparent);
+  border-color: color-mix(in srgb, #fff 24%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 32%, transparent), 0 16px 40px rgba(0, 0, 0, .32);
+}
+html[data-theme="dark"] .dash .kpi:hover { background: color-mix(in srgb, #fff 14%, transparent); }
+html[data-theme="dark"] .dash .btn {
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, #fff 22%, transparent);
+}
+html[data-theme="dark"] .dash th { background: color-mix(in srgb, #fff 6%, transparent); }
+html[data-theme="dark"] .dash .top li {
+  background: color-mix(in srgb, #fff 6%, transparent);
+  border-color: color-mix(in srgb, #fff 16%, transparent);
+}
+html[data-theme="dark"] .dash .channel-hit:hover,
+html[data-theme="dark"] .dash .top-hit:hover { background: color-mix(in srgb, #fff 8%, transparent); }
+html[data-theme="dark"] .dash .bars {
+  background: repeating-linear-gradient(color-mix(in srgb, #fff 10%, transparent) 0 1px, transparent 1px 28px);
+}
+@keyframes dash-rise {
+  0% { opacity: 0; transform: translateY(18px); filter: blur(8px); }
+  60% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@keyframes dash-row {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.dash .rise { animation: dash-rise .72s cubic-bezier(.22, 1, .36, 1) both; }
+.dash .rise-row { animation: dash-row .5s cubic-bezier(.22, 1, .36, 1) both; }
+.dash .bar { transition: height .9s cubic-bezier(.22, 1, .36, 1), background .15s; }
+@media (prefers-reduced-motion: reduce) {
+  .dash .rise, .dash .rise-row { animation: none; }
+}
+

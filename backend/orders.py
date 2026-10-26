@@ -1,3 +1,5 @@
+import os
+import re
 from datetime import date, datetime
 
 from flask import Blueprint, jsonify, request
@@ -5,6 +7,74 @@ from flask import Blueprint, jsonify, request
 from db import add_event, attach_new_order, connect, query
 
 bp = Blueprint("orders", __name__)
+REF_RE = re.compile(r"^CC-\d{1,8}$")
+
+
+def _sync_allowed():
+    expected = os.environ.get("PIACI_SYNC_TOKEN", "").strip()
+    if not expected:
+        return True
+    header = request.headers.get("Authorization", "")
+    sent = header[7:].strip() if header.startswith("Bearer ") else request.headers.get("X-Piaci-Token", "").strip()
+    return sent == expected
+
+
+def _when(value):
+    text = str(value or "")[:19]
+    if len(text) == 19 and text[4] == "-" and text[10] == "T":
+        return text
+    return datetime.now().replace(microsecond=0).isoformat()
+
+
+def _cosine_lines(raw):
+    lines = []
+    if not isinstance(raw, list):
+        return lines
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "Order items").strip()[:120] or "Order items"
+        size = str(item.get("size") or "").strip()[:40]
+        color = str(item.get("color") or "").strip()[:40]
+        try:
+            qty = int(item.get("qty") or 0)
+            price = int(item.get("price") or 0)
+        except (TypeError, ValueError):
+            continue
+        if qty < 1 or price < 0:
+            continue
+        lines.append({"title": title, "size": size, "color": color, "qty": qty, "price": price, "line_total": price * qty})
+    return lines
+
+
+def _shift_customer(db, name, email, phone, delta_orders, delta_spent):
+    row = db.execute("SELECT id, orders, spent, email, phone FROM customers WHERE name = ?", (name,)).fetchone()
+    if row is None:
+        if delta_orders <= 0 and delta_spent == 0:
+            return
+        db.execute(
+            "INSERT INTO customers (name, email, location, orders, spent, phone) VALUES (?, ?, 'Nairobi', ?, ?, ?)",
+            (name, email or "", max(delta_orders, 0), delta_spent, phone or ""),
+        )
+        return
+    orders = row["orders"] + delta_orders
+    spent = row["spent"] + delta_spent
+    if orders <= 0:
+        db.execute("DELETE FROM customers WHERE id = ?", (row["id"],))
+        return
+    db.execute(
+        "UPDATE customers SET orders = ?, spent = ?, email = ?, phone = ? WHERE id = ?",
+        (orders, spent, email or row["email"] or "", phone or row["phone"] or "", row["id"]),
+    )
+
+
+def _write_cosine_lines(db, order_id, lines):
+    db.execute("DELETE FROM order_lines WHERE order_id = ?", (order_id,))
+    for line in lines:
+        db.execute(
+            "INSERT INTO order_lines (order_id, title, price, qty, line_total, size, color) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (order_id, line["title"], line["price"], line["qty"], line["line_total"], line["size"], line["color"]),
+        )
 
 def load_order(order_id):
     rows = query("SELECT * FROM orders WHERE id = ?", (order_id,))
@@ -13,7 +83,7 @@ def load_order(order_id):
     order = rows[0]
     detail = query("SELECT confirmation, note FROM order_detail WHERE order_id = ?", (order_id,))
     address = query("SELECT name, line, city, country, billing_same FROM order_address WHERE order_id = ?", (order_id,))
-    lines = query("SELECT id, title, price, qty, line_total FROM order_lines WHERE order_id = ? ORDER BY id", (order_id,))
+    lines = query("SELECT id, title, price, qty, line_total, size, color FROM order_lines WHERE order_id = ? ORDER BY id", (order_id,))
     tags = [row["tag"] for row in query("SELECT tag FROM order_tags WHERE order_id = ? ORDER BY tag", (order_id,))]
     events = query("SELECT id, created_at, kind, body, draft_id FROM order_events WHERE order_id = ? ORDER BY id DESC", (order_id,))
     people = query("SELECT email, location FROM customers WHERE name = ?", (order["customer"],))
@@ -92,7 +162,7 @@ def orders():
 @bp.get("/api/order-lines")
 def order_lines():
     return jsonify(query(
-        """SELECT o.id AS order_id, o.created_at, o.customer, l.title, l.price, l.qty, l.line_total
+        """SELECT o.id AS order_id, o.created_at, o.customer, l.title, l.price, l.qty, l.line_total, l.size, l.color
            FROM order_lines l JOIN orders o ON o.id = l.order_id
            ORDER BY o.created_at DESC, l.id"""
     ))
@@ -142,6 +212,88 @@ def create_order():
         row = dict(db.execute("SELECT * FROM orders WHERE id = ?", (next_id,)).fetchone())
         attach_new_order(db, row)
     return jsonify(row), 201
+
+
+@bp.post("/api/integrations/cosine")
+def cosine_order():
+    if not _sync_allowed():
+        return jsonify(error="Unauthorized"), 401
+    body = request.json or {}
+    ref = str(body.get("ref") or "").strip()
+    customer = str(body.get("customer") or "").strip()
+    if not REF_RE.match(ref):
+        return jsonify(error="Order ref must look like CC-0001"), 400
+    if not customer:
+        return jsonify(error="Customer is required"), 400
+    lines = _cosine_lines(body.get("lines"))
+    if not lines:
+        return jsonify(error="Add at least one line"), 400
+    total = sum(line["line_total"] for line in lines)
+    items = sum(line["qty"] for line in lines)
+    email = str(body.get("email") or "").strip()[:120]
+    phone = str(body.get("phone") or "").strip()[:40]
+    contact = str(body.get("contact") or customer).strip()[:120]
+    note = str(body.get("note") or "").strip()[:500]
+    created = _when(body.get("created_at"))
+    with connect() as db:
+        existing = db.execute("SELECT * FROM orders WHERE external_ref = ?", (ref,)).fetchone()
+        if existing:
+            order_id = existing["id"]
+            if existing["customer"] != customer:
+                _shift_customer(db, existing["customer"], "", "", -1, -existing["total"])
+                _shift_customer(db, customer, email, phone, 1, total)
+            else:
+                _shift_customer(db, customer, email, phone, 0, total - existing["total"])
+            db.execute(
+                "UPDATE orders SET created_at = ?, customer = ?, total = ?, items = ? WHERE id = ?",
+                (created, customer, total, items, order_id),
+            )
+            db.execute("UPDATE order_detail SET note = ? WHERE order_id = ?", (note, order_id))
+            db.execute(
+                "UPDATE order_address SET name = ?, line = ? WHERE order_id = ?",
+                (contact, phone, order_id),
+            )
+            add_event(db, order_id, f"Cosine Create updated {ref}.")
+        else:
+            order_id = (db.execute("SELECT MAX(id) FROM orders").fetchone()[0] or 1000) + 1
+            db.execute(
+                """INSERT INTO orders
+                   (id, created_at, customer, fulfill_by, channel, total, payment, fulfillment, items, delivery_status, delivery_method, external_ref)
+                   VALUES (?, ?, ?, NULL, 'Online Store', ?, 'pending', 'unfulfilled', ?, NULL, 'Shipping', ?)""",
+                (order_id, created, customer, total, items, ref),
+            )
+            _shift_customer(db, customer, email, phone, 1, total)
+            row = dict(db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone())
+            attach_new_order(db, row)
+            db.execute("UPDATE order_detail SET note = ? WHERE order_id = ?", (note, order_id))
+            db.execute(
+                "UPDATE order_address SET name = ?, line = ? WHERE order_id = ?",
+                (contact, phone, order_id),
+            )
+            add_event(db, order_id, f"Cosine Create sent {ref}.")
+        _write_cosine_lines(db, order_id, lines)
+        saved = dict(db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone())
+    status = 200 if existing else 201
+    return jsonify(saved), status
+
+
+@bp.delete("/api/integrations/cosine/<ref>")
+def cosine_order_remove(ref):
+    if not _sync_allowed():
+        return jsonify(error="Unauthorized"), 401
+    ref = str(ref or "").strip()
+    if not REF_RE.match(ref):
+        return jsonify(error="Order ref must look like CC-0001"), 400
+    with connect() as db:
+        existing = db.execute("SELECT * FROM orders WHERE external_ref = ?", (ref,)).fetchone()
+        if existing is None:
+            return jsonify(ok=True, removed=False)
+        order_id = existing["id"]
+        _shift_customer(db, existing["customer"], "", "", -1, -existing["total"])
+        for table in ("order_lines", "order_detail", "order_address", "order_tags", "order_events"):
+            db.execute(f"DELETE FROM {table} WHERE order_id = ?", (order_id,))
+        db.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+    return jsonify(ok=True, removed=True)
 
 
 @bp.get("/api/orders/<int:order_id>")

@@ -12,32 +12,71 @@ def products():
     return jsonify(query("SELECT * FROM products ORDER BY id"))
 
 
+def _int(value, default=0):
+    try:
+        return int(value if value is not None and value != "" else default)
+    except (TypeError, ValueError):
+        return None
+
+
 @bp.post("/api/products")
 def add_product():
     body = request.json or {}
     title = str(body.get("title") or "").strip()
     if not title:
         return jsonify(error="Title is required"), 400
-    try:
-        price = int(body.get("price") or 0)
-        stock = int(body.get("stock") or 0)
-    except (TypeError, ValueError):
+    price = _int(body.get("price"), 0)
+    stock = _int(body.get("stock"), 0)
+    if price is None or stock is None or price < 0 or stock < 0:
         return jsonify(error="Price and stock must be numbers"), 400
-    if price < 0 or stock < 0:
-        return jsonify(error="Price and stock must be positive"), 400
+    status = body.get("status") if body.get("status") in ("active", "draft", "archived") else "active"
+    description = str(body.get("description") or "")
+    category = str(body.get("category") or "").strip()
+    product_type = str(body.get("product_type") or "").strip()
+    vendor = str(body.get("vendor") if "vendor" in body else "Maison").strip()
+    color = str(body.get("color") or "").strip()
+    media = str(body.get("media") or "").strip()
+    extra = body.get("extra") if isinstance(body.get("extra"), dict) else {}
+    tags = [str(tag).strip() for tag in body.get("tags") or [] if str(tag).strip()]
+    fields = [str(name).strip() for name in body.get("fields") or [] if str(name).strip()]
+    collections = []
+    for item in body.get("collections") or []:
+        try:
+            collections.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    weight = _int(extra.get("weight_g"), 0)
+    if weight is None or weight < 0:
+        weight = 0
+    tracked = 1 if extra.get("tracked", True) else 0
+    physical = 1 if extra.get("physical", True) else 0
+    continue_selling = 1 if extra.get("continue_selling") else 0
+    sku = str(extra.get("sku") or "").strip() or None
+    variant = str(extra.get("variant") or "").strip() or "Default"
     with connect() as db:
         cur = db.execute(
-            "INSERT INTO products (title, price, stock, sold) VALUES (?, ?, ?, 0)",
-            (title, price, stock),
+            "INSERT INTO products (title, price, stock, sold, description, status, category, product_type, vendor, color, media, extra) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (title, price, stock, description, status, category, product_type, vendor, color, media, json.dumps(extra)),
         )
-        row = dict(db.execute("SELECT * FROM products WHERE id = ?", (cur.lastrowid,)).fetchone())
-        handle = "".join(ch.lower() if ch.isalnum() else "-" for ch in title).strip("-")
-        handle = "-".join(part for part in handle.split("-") if part)
+        product_id = cur.lastrowid
+        handle = product_handle(title, product_id)
+        db.execute("UPDATE products SET handle = ? WHERE id = ?", (handle, product_id))
         db.execute(
-            "UPDATE products SET status = 'active', vendor = 'Maison', handle = ? WHERE id = ?",
-            (handle or f"product-{row['id']}", row["id"]),
+            """INSERT INTO inventory
+               (product, variant, sku, unavailable, committed, available, on_hand, incoming, price, weight, location, tracked, physical, continue_selling)
+               VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?, 'Nairobi', ?, ?, ?)""",
+            (title, variant, sku, stock, stock, price, weight, tracked, physical, continue_selling),
         )
-        row = dict(db.execute("SELECT * FROM products WHERE id = ?", (row["id"],)).fetchone())
+        for tag in tags:
+            db.execute("INSERT OR IGNORE INTO product_tags (product_id, tag) VALUES (?, ?)", (product_id, tag))
+        for name in fields:
+            db.execute("INSERT OR IGNORE INTO product_fields (product_id, name) VALUES (?, ?)", (product_id, name))
+        for collection_id in collections:
+            db.execute(
+                "INSERT OR IGNORE INTO collection_products (collection_id, product) VALUES (?, ?)",
+                (collection_id, title),
+            )
+        row = dict(db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone())
     return jsonify(row), 201
 
 

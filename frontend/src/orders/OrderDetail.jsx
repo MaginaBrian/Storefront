@@ -131,11 +131,13 @@ export default function OrderDetail({ orderId, onOpen, onChanged }) {
             <p className="ship-line"><Truck size={15} /> {order.delivery_method || 'Shipping'}</p>
             {lines.map(line => {
               const exact = line.price * line.qty === line.line_total
+              const detail = [line.size ? `Size ${line.size}` : '', line.color || ''].filter(Boolean).join(' · ')
+              const amount = exact ? `${money(line.price)} × ${line.qty.toLocaleString()}` : `${line.qty.toLocaleString()} items`
               return (
                 <div className="line-row" key={line.id}>
                   <input type="checkbox" defaultChecked aria-label={line.title} />
                   <strong>{line.title}</strong>
-                  <span className="muted">{exact ? `${money(line.price)} × ${line.qty.toLocaleString()}` : `${line.qty.toLocaleString()} items`}</span>
+                  <span className="muted">{detail ? `${detail} · ${amount}` : amount}</span>
                   <b>{money(line.line_total)}</b>
                 </div>
               )

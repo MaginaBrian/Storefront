@@ -185,7 +185,7 @@ export default function App() {
           {item(SETTINGS)}
         </div>
       </aside>
-      <main>
+      <main className={view === 'home' ? 'home-stage' : undefined}>
         {view === 'home' && <Home onOpen={setView} />}
         {ordersOpen && <OrdersSection view={view} onChanged={reloadSummary} onOpen={setView} focus={focus} />}
         {view === 'products' && <Products focus={focus} onOpen={setView} />}
