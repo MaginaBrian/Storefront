@@ -442,6 +442,16 @@ def migrate(db):
     _add_col(db, "order_lines", "color", "TEXT NOT NULL DEFAULT ''")
     _add_col(db, "orders", "external_ref", "TEXT")
     _add_col(db, "products", "extra", "TEXT NOT NULL DEFAULT '{}'")
+    for name, decl in (
+        ("description", "TEXT NOT NULL DEFAULT ''"),
+        ("image", "TEXT NOT NULL DEFAULT ''"),
+        ("theme", "TEXT NOT NULL DEFAULT 'Default collection'"),
+        ("seo_title", "TEXT NOT NULL DEFAULT ''"),
+        ("seo_description", "TEXT NOT NULL DEFAULT ''"),
+        ("sort", "TEXT NOT NULL DEFAULT 'Best selling'"),
+        ("excludes", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        _add_col(db, "collections", name, decl)
 
 
 def init_db():

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bold, Check, ChevronDown, ChevronLeft, Image, Italic, Link2, List, Plus, Search, Smile, Underline, X } from 'lucide-react'
+import { Bold, Check, ChevronDown, ChevronLeft, ChevronRight, Image, Italic, Link2, List, Plus, Search, Smile, Underline, X } from 'lucide-react'
 import { useJson } from '../lib/api.js'
 import { money } from '../lib/money.js'
 
-const CLOTHING = ['Activewear', 'Dresses', 'One-Pieces', 'Outerwear', 'Outfit Sets', 'Pants', 'Shorts', 'Skirts']
+const MAJORS = ['Animals & Pet Supplies', 'Apparel & Accessories', 'Arts & Entertainment', 'Baby & Toddler', 'Business & Industrial', 'Cameras & Optics', 'Electronics', 'Food, Beverages & Tobacco', 'Furniture', 'Hardware', 'Religious & Ceremonial', 'Software', 'Sporting Goods', 'Toys & Games', 'Vehicles & Parts', 'Gift Cards', 'Uncategorized', 'Services', 'Product Add-Ons', 'Bundles']
+const CLOTHING = ['Activewear', 'Dresses', 'One-Pieces', 'Outerwear', 'Outfit Sets', 'Pants', 'Shorts', 'Skirts', 'Skorts', 'Sleepwear & Loungewear', 'Suits', 'Swimwear', 'Traditional & Ceremonial Clothing', 'Wedding & Bridal Party Dresses', 'Lingerie', "Men's Undergarments", 'Socks', 'Maternity Clothing', 'Clothing Tops', 'Uniforms & Workwear', "Baby & Children's Clothing"]
 const VARIANT_OPTIONS = ['Color', 'Size', 'Fabric']
 const VARIANT_HINTS = { Color: 'Black, White, Navy', Size: 'XS, S, M, L, XL', Fabric: 'Cotton, Linen, Wool' }
 const TYPES = ['Shirt', 'Bag', 'Accessory', 'Vest']
@@ -31,6 +32,7 @@ export default function AddProduct({ onOpen, gift = false }) {
   const [category, setCategory] = useState('')
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [categoryQuery, setCategoryQuery] = useState('')
+  const [categoryLevel, setCategoryLevel] = useState('major')
   const [status, setStatus] = useState('active')
   const [channels, setChannels] = useState(true)
   const [productType, setProductType] = useState('')
@@ -211,8 +213,8 @@ export default function AddProduct({ onOpen, gift = false }) {
           <section className="detail-card">
             <div className="field category-picker">
               <span>Category</span>
-              <button type="button" className="category-input" onClick={() => setCategoryOpen(open => !open)}>
-                <span className={category ? '' : 'muted'}>{category ? `Clothing / ${category}` : 'Choose a product category'}</span>
+              <button type="button" className="category-input" onClick={() => { setCategoryOpen(open => !open); if (CLOTHING.includes(category)) setCategoryLevel('clothing') }}>
+                <span className={category ? '' : 'muted'}>{category ? (CLOTHING.includes(category) ? `Clothing / ${category}` : category) : 'Choose a product category'}</span>
                 <ChevronDown size={14} />
               </button>
               {categoryOpen && (
@@ -221,10 +223,42 @@ export default function AddProduct({ onOpen, gift = false }) {
                     <Search size={14} />
                     <input aria-label="Search categories" placeholder="Search categories" value={categoryQuery} onChange={e => setCategoryQuery(e.target.value)} />
                   </label>
-                  <p className="category-major"><Check size={14} /> Clothing</p>
-                  {CLOTHING.filter(item => item.toLowerCase().includes(categoryQuery.trim().toLowerCase())).map(item => (
-                    <button type="button" key={item} className={category === item ? 'on inside' : 'inside'} onClick={() => setCategory(item)}>
+                  {categoryQuery.trim() ? (
+                    <>
+                      {MAJORS.filter(item => item.toLowerCase().includes(categoryQuery.trim().toLowerCase())).map(item => (
+                        <button type="button" key={item} className={category === item ? 'on' : ''} onClick={() => item === 'Apparel & Accessories' ? setCategoryLevel('apparel') : setCategory(item)}>
+                          <span>{category === item && <Check size={14} />} {item}</span>
+                          {item === 'Apparel & Accessories' && <ChevronRight size={14} />}
+                        </button>
+                      ))}
+                      {CLOTHING.filter(item => item.toLowerCase().includes(categoryQuery.trim().toLowerCase())).map(item => (
+                        <button type="button" key={item} className={category === item ? 'on' : ''} onClick={() => setCategory(item)}>
+                          <span>{category === item && <Check size={14} />} Clothing / {item}</span>
+                        </button>
+                      ))}
+                    </>
+                  ) : categoryLevel === 'clothing' ? (
+                    <>
+                      <button type="button" onClick={() => setCategoryLevel('apparel')}><ChevronLeft size={14} /> Back to Apparel & Accessories</button>
+                      <p className="category-major"><Check size={14} /> Clothing</p>
+                      {CLOTHING.map(item => (
+                        <button type="button" key={item} className={category === item ? 'on inside' : 'inside'} onClick={() => setCategory(item)}>
+                          <span>{category === item && <Check size={14} />} {item}</span>
+                        </button>
+                      ))}
+                    </>
+                  ) : categoryLevel === 'apparel' ? (
+                    <>
+                      <button type="button" onClick={() => setCategoryLevel('major')}><ChevronLeft size={14} /> Back</button>
+                      <button type="button" onClick={() => setCategoryLevel('clothing')}>
+                        <span>Clothing</span>
+                        <ChevronRight size={14} />
+                      </button>
+                    </>
+                  ) : MAJORS.map(item => (
+                    <button type="button" key={item} className={category === item ? 'on' : ''} onClick={() => item === 'Apparel & Accessories' ? setCategoryLevel('apparel') : setCategory(item)}>
                       <span>{category === item && <Check size={14} />} {item}</span>
+                      {item === 'Apparel & Accessories' && <ChevronRight size={14} />}
                     </button>
                   ))}
                 </div>

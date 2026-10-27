@@ -9,7 +9,13 @@ bp = Blueprint("catalog", __name__)
 
 @bp.get("/api/products")
 def products():
-    return jsonify(query("SELECT * FROM products ORDER BY id"))
+    rows = query("SELECT * FROM products ORDER BY id")
+    grouped = {}
+    for tag in query("SELECT product_id, tag FROM product_tags ORDER BY tag"):
+        grouped.setdefault(tag["product_id"], []).append(tag["tag"])
+    for row in rows:
+        row["tags"] = grouped.get(row["id"], [])
+    return jsonify(rows)
 
 
 def _int(value, default=0):
@@ -218,7 +224,7 @@ def collections():
 
 @bp.get("/api/collections/<int:collection_id>")
 def collection_detail(collection_id):
-    found = query("SELECT id, title, conditions FROM collections WHERE id = ?", (collection_id,))
+    found = query("SELECT * FROM collections WHERE id = ?", (collection_id,))
     if not found:
         return jsonify(error="Collection not found"), 404
     return jsonify(
@@ -243,16 +249,35 @@ def create_collection():
     single = str(body.get("product") or "").strip()
     if single and single not in names:
         names.append(single)
+    channels = []
+    for item in body.get("channels") or ["Online Store", "Agentic"]:
+        name = str(item or "").strip()
+        if name and name not in channels:
+            channels.append(name)
+    description = str(body.get("description") or "")
+    image = str(body.get("image") or "")
+    if len(image) > 400_000:
+        image = ""
+    theme = str(body.get("theme") or "Default collection")
+    seo_title = str(body.get("seo_title") or "")
+    seo_description = str(body.get("seo_description") or "")
+    sort = str(body.get("sort") or "Best selling")
+    excludes = str(body.get("excludes") or "")
     with connect() as db:
-        cur = db.execute("INSERT INTO collections (title, conditions) VALUES (?, ?)", (title, conditions))
+        cur = db.execute(
+            """INSERT INTO collections
+               (title, conditions, description, image, theme, seo_title, seo_description, sort, excludes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (title, conditions, description, image, theme, seo_title, seo_description, sort, excludes),
+        )
         collection_id = cur.lastrowid
         db.executemany(
             "INSERT OR IGNORE INTO collection_products (collection_id, product) VALUES (?, ?)",
             [(collection_id, name) for name in names],
         )
-        db.execute(
-            "INSERT OR IGNORE INTO collection_channels (collection_id, channel) VALUES (?, 'Online Store')",
-            (collection_id,),
+        db.executemany(
+            "INSERT OR IGNORE INTO collection_channels (collection_id, channel) VALUES (?, ?)",
+            [(collection_id, name) for name in channels],
         )
     return jsonify(id=collection_id), 201
 
