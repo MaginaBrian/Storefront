@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
-import { Calendar, Hash, Link2, MapPin, Search, StickyNote, Tag } from 'lucide-react'
+import { Fragment, useMemo, useState } from 'react'
+import { Calendar, Hash, Image, Link2, MapPin, Search, StickyNote, Tag } from 'lucide-react'
+import { Modal } from '../components/Modal.jsx'
 import { money } from '../lib/money.js'
 import { useJson } from '../lib/api.js'
 
@@ -11,26 +12,169 @@ function code() {
   return Array.from({ length: 17 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
 }
 
-function ProductSearch({ inventory, lines, onAdd }) {
+function lineFrom(item) {
+  return { inventory_id: item.id, title: `${item.product} · ${item.variant}`, qty: 1, price: item.price || 0, sku: item.sku || '' }
+}
+
+function atDestination(item, destination) {
+  if (!destination || (item.location || 'Nairobi') === destination) return item.available
+  return 0
+}
+
+export function AddProducts({ inventory, lines, destination, onAdd, hideLines = false }) {
+  const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const hits = useMemo(() => {
+  const [searchBy, setSearchBy] = useState('All')
+  const [picked, setPicked] = useState([])
+  const chosen = new Set(lines.map(line => line.inventory_id))
+  const groups = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (q.length < 1) return []
-    return (inventory || []).filter(r => `${r.product} ${r.variant}`.toLowerCase().includes(q)).slice(0, 6)
-  }, [inventory, query])
+    const rows = (inventory || []).filter(item => !chosen.has(item.id))
+    const names = [...new Set(rows.map(item => item.product))]
+    return names.map(product => {
+      const items = rows.filter(item => item.product === product)
+      const nameHit = (searchBy === 'All' || searchBy === 'Product') && product.toLowerCase().includes(q)
+      const variants = items.filter(item => {
+        if (!q || (nameHit && searchBy !== 'Variant' && searchBy !== 'SKU')) return true
+        const variant = (item.variant || '').toLowerCase()
+        const sku = (item.sku || '').toLowerCase()
+        if (searchBy === 'Product') return product.toLowerCase().includes(q)
+        if (searchBy === 'Variant') return variant.includes(q)
+        if (searchBy === 'SKU') return sku.includes(q)
+        return `${product} ${variant} ${sku}`.toLowerCase().includes(q)
+      })
+      return { product, variants }
+    }).filter(group => group.variants.length)
+  }, [inventory, lines, query, searchBy])
+  const toggle = id => setPicked(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
+  const toggleGroup = variants => {
+    const ids = variants.map(item => item.id)
+    const all = ids.every(id => picked.includes(id))
+    setPicked(current => all ? current.filter(id => !ids.includes(id)) : [...new Set([...current, ...ids])])
+  }
+  const addChosen = () => {
+    const items = (inventory || []).filter(item => picked.includes(item.id))
+    if (items.length) onAdd(items)
+    setPicked([])
+    setQuery('')
+    setOpen(false)
+  }
   return (
     <div className="po-search">
-      <label className="finder"><Search size={15} /><input placeholder="Search products to add" value={query} onChange={e => setQuery(e.target.value)} /></label>
-      {hits.length > 0 && (
+      <button type="button" className="po-open" onClick={() => { setPicked([]); setOpen(true) }}>
+        <Search size={15} /> Search products to add
+      </button>
+      {open && (
+        <Modal title="Add products" onClose={() => setOpen(false)}>
+          <div className="add-products">
+            <div className="add-tools">
+              <label className="category-search">
+                <Search size={14} />
+                <input aria-label="Search products" placeholder="Search products" value={query} onChange={e => setQuery(e.target.value)} />
+              </label>
+              <select aria-label="Search by" value={searchBy} onChange={e => setSearchBy(e.target.value)}>
+                <option value="All">Search by All</option>
+                <option value="Product">Product</option>
+                <option value="Variant">Variant</option>
+                <option value="SKU">SKU</option>
+              </select>
+            </div>
+            <div className="inv-scroll">
+              <table className="inv-table">
+                <thead>
+                  <tr><th /><th>Product</th><th>Available at Destination</th><th>Available</th></tr>
+                </thead>
+                <tbody>
+                  {groups.map(group => {
+                    const ids = group.variants.map(item => item.id)
+                    const all = ids.every(id => picked.includes(id))
+                    const some = ids.some(id => picked.includes(id))
+                    return (
+                      <Fragment key={group.product}>
+                        <tr>
+                          <td><input aria-label={`Select ${group.product}`} type="checkbox" checked={all} ref={el => { if (el) el.indeterminate = some && !all }} onChange={() => toggleGroup(group.variants)} /></td>
+                          <td><span className="inv-name"><Image size={16} /> {group.product}</span></td>
+                          <td /><td />
+                        </tr>
+                        {group.variants.map(item => (
+                          <tr key={item.id}>
+                            <td><input aria-label={`Select ${item.product} ${item.variant}`} type="checkbox" checked={picked.includes(item.id)} onChange={() => toggle(item.id)} /></td>
+                            <td className="inv-variant">{item.variant}</td>
+                            <td>{atDestination(item, destination)}</td>
+                            <td>{item.available}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+              {inventory && groups.length === 0 && <p className="muted">No inventory matches.</p>}
+              {!inventory && <p className="muted">Loading inventory…</p>}
+            </div>
+          </div>
+          <div className="modal-actions">
+            <span className="muted">{picked.length} {picked.length === 1 ? 'variant' : 'variants'} selected</span>
+            <button type="button" className="ghost" onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className="solid" disabled={!picked.length} onClick={addChosen}>Add to purchase order</button>
+          </div>
+        </Modal>
+      )}
+      {!hideLines && lines.length > 0 && (
+        <ul className="variant-list">
+          {lines.map(line => <li key={line.inventory_id}><span>{line.title} × {line.qty}</span><b>{money(line.price * line.qty)}</b></li>)}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+export function ProductSearch({ inventory, lines, onAdd, hideLines = false }) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const chosen = new Set(lines.map(line => line.inventory_id))
+  const hits = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return (inventory || [])
+      .filter(item => !chosen.has(item.id))
+      .filter(item => !q || `${item.product} ${item.variant} ${item.sku || ''}`.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [inventory, query, lines])
+  return (
+    <div className="po-search">
+      <label className="finder">
+        <Search size={15} />
+        <input
+          aria-label="Search inventory"
+          placeholder="Search products to add"
+          value={query}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onChange={e => { setQuery(e.target.value); setOpen(true) }}
+        />
+      </label>
+      {open && (
         <div className="library">
           {hits.map(item => (
-            <button type="button" key={item.id} onClick={() => { onAdd(item); setQuery('') }}>
-              {item.product} · {item.variant} · {money(item.price || 0)}
+            <button
+              type="button"
+              className="inventory-hit"
+              key={item.id}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onAdd(item); setQuery(''); setOpen(false) }}
+            >
+              <span>
+                {item.product}
+                <small>{item.variant} · {item.on_hand} on hand{item.sku ? ` · ${item.sku}` : ''}</small>
+              </span>
+              <b>{money(item.price || 0)}</b>
             </button>
           ))}
+          {!inventory && <p className="muted">Loading inventory…</p>}
+          {inventory && hits.length === 0 && <p className="muted">No inventory matches.</p>}
         </div>
       )}
-      {lines.length > 0 && (
+      {!hideLines && lines.length > 0 && (
         <ul className="variant-list">
           {lines.map(line => <li key={line.inventory_id}><span>{line.title} × {line.qty}</span><b>{money(line.price * line.qty)}</b></li>)}
         </ul>
@@ -52,7 +196,11 @@ export function CreatePurchaseOrder({ onOpen, onSaved }) {
   const [busy, setBusy] = useState(false)
   const units = lines.reduce((sum, line) => sum + line.qty, 0)
   const total = lines.reduce((sum, line) => sum + line.price * line.qty, 0)
-  const add = item => setLines(prev => prev.some(line => line.inventory_id === item.id) ? prev : [...prev, { inventory_id: item.id, title: `${item.product} · ${item.variant}`, qty: 1, price: item.price || 0 }])
+  const add = items => setLines(prev => {
+    const incoming = Array.isArray(items) ? items : [items]
+    const ids = new Set(prev.map(line => line.inventory_id))
+    return [...prev, ...incoming.filter(item => !ids.has(item.id)).map(lineFrom)]
+  })
   const save = e => {
     e.preventDefault()
     if (!supplier) { setError('Select a supplier.'); return }
@@ -93,7 +241,7 @@ export function CreatePurchaseOrder({ onOpen, onSaved }) {
               {PLACES.map(place => <option key={place}>{place}</option>)}
             </select>
           </section>
-          <ProductSearch inventory={inventory} lines={lines} onAdd={add} />
+          <AddProducts inventory={inventory} lines={lines} destination={destination} onAdd={add} />
         </div>
         <aside className="order-side">
           <section className="detail-card">

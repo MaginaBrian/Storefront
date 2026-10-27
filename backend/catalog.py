@@ -1,5 +1,9 @@
+import csv
+import io
 import json
+import zipfile
 from datetime import datetime
+from xml.etree import ElementTree
 
 from flask import Blueprint, jsonify, request
 
@@ -309,6 +313,139 @@ def add_inventory():
     return jsonify(row), 201
 
 
+def _sheet_rows(data):
+    if data[:2] == b"PK":
+        return _xlsx_rows(data)
+    if data[:8] == bytes.fromhex("D0CF11E0A1B11AE1"):
+        raise ValueError("Save this workbook as CSV or .xlsx. The older .xls format is not read.")
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ValueError("That file is not a CSV or .xlsx workbook.") from exc
+    return list(csv.reader(io.StringIO(text)))
+
+
+def _xlsx_rows(data):
+    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    tag = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    try:
+        book = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise ValueError("That .xlsx file could not be read.") from exc
+    with book:
+        names = book.namelist()
+        shared = []
+        if "xl/sharedStrings.xml" in names:
+            root = ElementTree.fromstring(book.read("xl/sharedStrings.xml"))
+            for item in root.findall("m:si", ns):
+                shared.append("".join(node.text or "" for node in item.iter(f"{tag}t")))
+        sheet_name = next((item for item in names if item.startswith("xl/worksheets/sheet")), "")
+        if not sheet_name:
+            raise ValueError("That workbook has no sheet.")
+        root = ElementTree.fromstring(book.read(sheet_name))
+    rows = []
+    for row in root.findall("m:sheetData/m:row", ns):
+        cells = []
+        for cell in row.findall("m:c", ns):
+            ref = cell.attrib.get("r", "")
+            col = 0
+            for char in ref:
+                if char.isalpha():
+                    col = col * 26 + ord(char.upper()) - 64
+                else:
+                    break
+            while len(cells) < max(col - 1, 0):
+                cells.append("")
+            node = cell.find("m:v", ns)
+            value = node.text if node is not None and node.text else ""
+            if cell.attrib.get("t") == "s" and value.isdigit():
+                index = int(value)
+                value = shared[index] if index < len(shared) else ""
+            cells.append(value)
+        rows.append(cells)
+    return rows
+
+
+def _inventory_updates(table):
+    if not table or not any(cell.strip() for cell in table[0]):
+        raise ValueError("The file is empty.")
+    headers = [cell.strip().lower() for cell in table[0]]
+
+    def pick(row, *keys):
+        for key in keys:
+            if key in headers:
+                index = headers.index(key)
+                if index < len(row) and str(row[index]).strip():
+                    return str(row[index]).strip()
+        return ""
+
+    updates = []
+    for raw in table[1:]:
+        if not any(str(cell).strip() for cell in raw):
+            continue
+        product = pick(raw, "product", "title")
+        variant = pick(raw, "variant", "option1 value", "option value") or "Default"
+        sku = pick(raw, "sku")
+        if sku.lower() == "no sku":
+            sku = ""
+        quantity = pick(raw, "on hand", "on hand (new)", "on_hand")
+        if not quantity:
+            continue
+        try:
+            on_hand = int(float(quantity))
+        except ValueError as exc:
+            label = product or sku or "A row"
+            raise ValueError(f"{label} has an on-hand value that is not a number.") from exc
+        if on_hand < 0:
+            raise ValueError("On hand must be positive.")
+        if not product and not sku:
+            raise ValueError("Each row needs a product or a SKU.")
+        updates.append({"product": product, "variant": variant, "sku": sku, "on_hand": on_hand})
+    if not updates:
+        raise ValueError("The file needs Product, Variant, and On hand columns.")
+    return updates
+
+
+@bp.post("/api/inventory/import")
+def import_inventory():
+    upload = request.files.get("file")
+    if not upload:
+        return jsonify(error="Choose a CSV or .xlsx file."), 400
+    data = upload.read()
+    if not data:
+        return jsonify(error="That file is empty."), 400
+    try:
+        updates = _inventory_updates(_sheet_rows(data))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    updated = []
+    skipped = []
+    with connect() as db:
+        for row in updates:
+            found = None
+            if row["sku"]:
+                match = db.execute("SELECT * FROM inventory WHERE sku = ?", (row["sku"],)).fetchone()
+                found = dict(match) if match else None
+            if not found and row["product"]:
+                match = db.execute(
+                    "SELECT * FROM inventory WHERE lower(product) = lower(?) AND lower(variant) = lower(?)",
+                    (row["product"], row["variant"]),
+                ).fetchone()
+                found = dict(match) if match else None
+            if not found:
+                skipped.append(row["sku"] or f"{row['product']} / {row['variant']}")
+                continue
+            available = max(row["on_hand"] - found["unavailable"] - found["committed"], 0)
+            db.execute(
+                "UPDATE inventory SET on_hand = ?, available = ? WHERE id = ?",
+                (row["on_hand"], available, found["id"]),
+            )
+            updated.append(found["id"])
+    if not updated:
+        return jsonify(error="No rows matched inventory. Use the product and variant, or a SKU."), 400
+    return jsonify(updated=len(updated), skipped=skipped)
+
+
 @bp.post("/api/inventory/<int:item_id>")
 def inventory_action(item_id):
     if not query("SELECT id FROM inventory WHERE id = ?", (item_id,)):
@@ -354,6 +491,35 @@ def inventory_action(item_id):
 @bp.get("/api/purchase-orders")
 def purchase_orders():
     return jsonify(query("SELECT * FROM purchase_orders ORDER BY id DESC"))
+
+
+@bp.get("/api/purchase-orders/<int:po_id>")
+def purchase_order(po_id):
+    found = query("SELECT * FROM purchase_orders WHERE id = ?", (po_id,))
+    if not found:
+        return jsonify(error="Purchase order not found"), 404
+    return jsonify(found[0])
+
+
+@bp.post("/api/purchase-orders/<int:po_id>")
+def purchase_order_action(po_id):
+    if not query("SELECT id FROM purchase_orders WHERE id = ?", (po_id,)):
+        return jsonify(error="Purchase order not found"), 404
+    body = request.json or {}
+    action = body.get("action")
+    with connect() as db:
+        current = db.execute("SELECT status FROM purchase_orders WHERE id = ?", (po_id,)).fetchone()
+        if action == "order":
+            db.execute("UPDATE purchase_orders SET status = 'ordered' WHERE id = ?", (po_id,))
+        elif action == "lines":
+            if current["status"] == "ordered":
+                return jsonify(error="This purchase order is already ordered."), 400
+            lines = body.get("lines") if isinstance(body.get("lines"), list) else []
+            db.execute("UPDATE purchase_orders SET lines = ? WHERE id = ?", (json.dumps(lines), po_id))
+        else:
+            return jsonify(error="Unknown action"), 400
+        row = dict(db.execute("SELECT * FROM purchase_orders WHERE id = ?", (po_id,)).fetchone())
+    return jsonify(row)
 
 
 @bp.post("/api/purchase-orders")

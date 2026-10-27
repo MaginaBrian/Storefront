@@ -1,14 +1,62 @@
 import { useMemo, useState } from 'react'
 import { Image } from 'lucide-react'
+import { Modal } from '../components/Modal.jsx'
 import { useJson } from '../lib/api.js'
 import { csv } from '../lib/csv.js'
 import VariantEditor from './VariantEditor.jsx'
 import { FormModal, Toolbar } from './ui.jsx'
 
+function ImportInventory({ onClose, onImported }) {
+  const [file, setFile] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const sample = () => csv([
+    ['Product', 'Variant', 'SKU', 'On hand'],
+    ['B1820 - Fabric', 'Black', '', '1'],
+  ], 'inventory-sample.csv')
+  const upload = () => {
+    if (!file) return
+    setBusy(true)
+    const body = new FormData()
+    body.append('file', file)
+    fetch('/api/inventory/import', { method: 'POST', body }).then(async response => {
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || 'Could not import inventory')
+      onImported()
+      if (payload.skipped?.length) {
+        setError(`Updated ${payload.updated}. Skipped ${payload.skipped.join(', ')}.`)
+        setBusy(false)
+        setFile(null)
+        return
+      }
+      onClose()
+    }).catch(err => { setError(err.message); setBusy(false) })
+  }
+  return (
+    <Modal title="Import inventory by CSV" onClose={onClose}>
+      <div className="export-body">
+        <p>This CSV file updates your On hand inventory quantities.</p>
+        <label className="drop-actions csv-drop">
+          <input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={e => { setFile(e.target.files?.[0] || null); setError('') }} />
+          <span className="ghost">Add files</span>
+          <small>{file ? file.name : 'Accepts .csv and .xlsx'}</small>
+        </label>
+        {error && <p className="form-error">{error}</p>}
+      </div>
+      <div className="modal-actions">
+        <button type="button" className="text-link push" onClick={sample}>Download a sample CSV</button>
+        <button type="button" className="ghost" onClick={onClose}>Cancel</button>
+        <button type="button" className="solid" disabled={!file || busy} onClick={upload}>{busy ? 'Uploading…' : 'Upload file'}</button>
+      </div>
+    </Modal>
+  )
+}
+
 export function Inventory({ focus = {}, onOpen }) {
   const [rows, reload, error] = useJson('/api/inventory')
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [product, setProduct] = useState('')
   const [variant, setVariant] = useState('')
   const [onHand, setOnHand] = useState('')
@@ -59,8 +107,9 @@ export function Inventory({ focus = {}, onOpen }) {
       <div className="orders-top">
         <h1>Inventory</h1>
         <div className="orders-actions">
+          <button type="button" className="ghost" onClick={() => { setFormError(''); setOpen(true) }}>Add inventory</button>
           <button type="button" className="ghost" onClick={exportRows}>Export</button>
-          <button type="button" className="ghost" onClick={() => setOpen(true)}>Import</button>
+          <button type="button" className="ghost" onClick={() => setImporting(true)}>Import</button>
         </div>
       </div>
       {picked && (
@@ -111,7 +160,7 @@ export function Inventory({ focus = {}, onOpen }) {
         </div>
       </div>
       {open && (
-        <FormModal title="Import inventory" onClose={() => setOpen(false)}>{
+        <FormModal title="Add inventory" onClose={() => setOpen(false)}>{
           {
             onSubmit: save,
             error: formError,
@@ -123,6 +172,7 @@ export function Inventory({ focus = {}, onOpen }) {
           }
         }</FormModal>
       )}
+      {importing && <ImportInventory onClose={() => setImporting(false)} onImported={reload} />}
     </>
   )
 }

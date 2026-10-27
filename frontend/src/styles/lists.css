@@ -147,7 +147,9 @@
 .segment-query { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; background: #fff; }
 .segment-query input { flex: 1; border: 0; outline: 0; font: inherit; background: none; color: var(--text); }
 .segment-hits { margin: -4px 0 10px; }
-.csv-drop { min-height: 120px; cursor: pointer; }
+.csv-drop { min-height: 140px; cursor: pointer; flex-direction: column; padding: 28px 16px; }
+.csv-drop small { color: var(--muted); }
+.modal-actions .push { margin-right: auto; }
 .name-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .phone-input { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .phone-input input { border: 0; outline: 0; flex: 1; font: inherit; background: none; color: var(--text); }
