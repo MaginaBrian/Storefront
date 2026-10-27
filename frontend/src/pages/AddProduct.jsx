@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bold, Check, ChevronDown, ChevronLeft, ChevronRight, Image, Italic, Link2, List, Plus, Search, Smile, Underline, X } from 'lucide-react'
+import { Bold, Check, ChevronDown, ChevronLeft, Image, Italic, Link2, List, Plus, Search, Smile, Underline, X } from 'lucide-react'
 import { useJson } from '../lib/api.js'
 import { money } from '../lib/money.js'
 
@@ -31,7 +31,6 @@ export default function AddProduct({ onOpen, gift = false }) {
   const [category, setCategory] = useState('')
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [categoryQuery, setCategoryQuery] = useState('')
-  const [inClothing, setInClothing] = useState(true)
   const [status, setStatus] = useState('active')
   const [channels, setChannels] = useState(true)
   const [productType, setProductType] = useState('')
@@ -213,7 +212,7 @@ export default function AddProduct({ onOpen, gift = false }) {
             <div className="field category-picker">
               <span>Category</span>
               <button type="button" className="category-input" onClick={() => setCategoryOpen(open => !open)}>
-                <span className={category ? '' : 'muted'}>{category || 'Choose a product category'}</span>
+                <span className={category ? '' : 'muted'}>{category ? `Clothing / ${category}` : 'Choose a product category'}</span>
                 <ChevronDown size={14} />
               </button>
               {categoryOpen && (
@@ -222,22 +221,9 @@ export default function AddProduct({ onOpen, gift = false }) {
                     <Search size={14} />
                     <input aria-label="Search categories" placeholder="Search categories" value={categoryQuery} onChange={e => setCategoryQuery(e.target.value)} />
                   </label>
-                  {inClothing && !categoryQuery.trim() && (
-                    <button type="button" onClick={() => setInClothing(false)}><ChevronLeft size={14} /> Back to Apparel & Accessories</button>
-                  )}
-                  {(inClothing || categoryQuery.trim()) && (
-                    <button type="button" className={category === 'Clothing' ? 'on' : ''} onClick={() => setCategory('Clothing')}>
-                      <span>{category === 'Clothing' && <Check size={14} />} Clothing</span>
-                    </button>
-                  )}
-                  {!inClothing && !categoryQuery.trim() && (
-                    <button type="button" onClick={() => setInClothing(true)}>
-                      <span>Clothing</span>
-                      <ChevronRight size={14} />
-                    </button>
-                  )}
-                  {(inClothing || categoryQuery.trim()) && CLOTHING.filter(item => item.toLowerCase().includes(categoryQuery.trim().toLowerCase())).map(item => (
-                    <button type="button" key={item} className={category === item ? 'on' : ''} onClick={() => setCategory(item)}>
+                  <p className="category-major"><Check size={14} /> Clothing</p>
+                  {CLOTHING.filter(item => item.toLowerCase().includes(categoryQuery.trim().toLowerCase())).map(item => (
+                    <button type="button" key={item} className={category === item ? 'on inside' : 'inside'} onClick={() => setCategory(item)}>
                       <span>{category === item && <Check size={14} />} {item}</span>
                     </button>
                   ))}
