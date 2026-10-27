@@ -399,6 +399,7 @@ def migrate(db):
         ("currency", "TEXT NOT NULL DEFAULT 'KES'"),
         ("tags", "TEXT NOT NULL DEFAULT ''"),
         ("lines", "TEXT NOT NULL DEFAULT '[]'"),
+        ("comments", "TEXT NOT NULL DEFAULT '[]'"),
     ):
         _add_col(db, "purchase_orders", name, decl)
     for name, decl in (

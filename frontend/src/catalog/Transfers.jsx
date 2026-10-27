@@ -5,7 +5,7 @@ import { EmptyCatalog, TransferMark } from './ui.jsx'
 export function Transfers({ onOpen, focus = {} }) {
   const [rows, reload] = useJson('/api/transfers')
   const picked = (rows || []).find(r => String(r.id) === String(focus.transfer))
-  if (focus.create === '1') return <CreateTransfer onOpen={onOpen} onSaved={reload} />
+  if (focus.create === '1') return <CreateTransfer onOpen={onOpen} onSaved={reload} purchaseOrderId={focus.po || ''} />
   if (!rows) return <p className="muted">Loading transfers…</p>
   if (rows.length === 0) {
     return (

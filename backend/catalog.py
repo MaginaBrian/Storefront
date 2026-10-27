@@ -501,24 +501,75 @@ def purchase_order(po_id):
     return jsonify(found[0])
 
 
+def _po_text(body, key, limit):
+    return str(body.get(key) or "")[:limit]
+
+
 @bp.post("/api/purchase-orders/<int:po_id>")
 def purchase_order_action(po_id):
-    if not query("SELECT id FROM purchase_orders WHERE id = ?", (po_id,)):
-        return jsonify(error="Purchase order not found"), 404
     body = request.json or {}
     action = body.get("action")
     with connect() as db:
-        current = db.execute("SELECT status FROM purchase_orders WHERE id = ?", (po_id,)).fetchone()
+        current = db.execute("SELECT * FROM purchase_orders WHERE id = ?", (po_id,)).fetchone()
+        if not current:
+            return jsonify(error="Purchase order not found"), 404
+        status = current["status"]
+        target = po_id
         if action == "order":
+            if status == "archived":
+                return jsonify(error="This purchase order is archived."), 400
             db.execute("UPDATE purchase_orders SET status = 'ordered' WHERE id = ?", (po_id,))
+        elif action == "archive":
+            db.execute("UPDATE purchase_orders SET status = 'archived' WHERE id = ?", (po_id,))
+        elif action == "delete":
+            db.execute("DELETE FROM purchase_orders WHERE id = ?", (po_id,))
+            return jsonify(deleted=True)
+        elif action == "duplicate":
+            created = datetime.now().replace(microsecond=0).isoformat()
+            cur = db.execute(
+                "INSERT INTO purchase_orders (supplier, status, created_at, destination, reference, note, terms, currency, tags, lines, comments) VALUES (?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, '[]')",
+                (
+                    current["supplier"], created, current["destination"], current["reference"], current["note"],
+                    current["terms"], current["currency"], current["tags"], current["lines"],
+                ),
+            )
+            target = cur.lastrowid
+        elif action == "comment":
+            text = str(body.get("body") or "").strip()
+            if not text:
+                return jsonify(error="Write a comment."), 400
+            try:
+                comments = json.loads(current["comments"] or "[]")
+            except json.JSONDecodeError:
+                comments = []
+            if not isinstance(comments, list):
+                comments = []
+            comments.append({"body": text[:2000], "created_at": datetime.now().replace(microsecond=0).isoformat()})
+            db.execute("UPDATE purchase_orders SET comments = ? WHERE id = ?", (json.dumps(comments), po_id))
         elif action == "lines":
-            if current["status"] == "ordered":
-                return jsonify(error="This purchase order is already ordered."), 400
+            if status != "draft":
+                return jsonify(error="This purchase order can no longer be edited."), 400
             lines = body.get("lines") if isinstance(body.get("lines"), list) else []
             db.execute("UPDATE purchase_orders SET lines = ? WHERE id = ?", (json.dumps(lines), po_id))
+        elif action == "update":
+            if status == "archived":
+                return jsonify(error="This purchase order is archived."), 400
+            fields, values = [], []
+            for key, limit in (("supplier", 120), ("destination", 80), ("reference", 255), ("note", 5000), ("terms", 40), ("tags", 40)):
+                if key not in body:
+                    continue
+                fields.append(f"{key} = ?")
+                values.append(_po_text(body, key, limit).strip() if key != "note" else _po_text(body, key, limit))
+            if status == "draft" and isinstance(body.get("lines"), list):
+                fields.append("lines = ?")
+                values.append(json.dumps(body["lines"]))
+            if not fields:
+                return jsonify(error="Nothing to update"), 400
+            values.append(po_id)
+            db.execute(f"UPDATE purchase_orders SET {', '.join(fields)} WHERE id = ?", values)
         else:
             return jsonify(error="Unknown action"), 400
-        row = dict(db.execute("SELECT * FROM purchase_orders WHERE id = ?", (po_id,)).fetchone())
+        row = dict(db.execute("SELECT * FROM purchase_orders WHERE id = ?", (target,)).fetchone())
     return jsonify(row)
 
 
@@ -551,6 +602,20 @@ def create_purchase_order():
 @bp.get("/api/transfers")
 def transfers():
     return jsonify(query("SELECT * FROM transfers ORDER BY id DESC"))
+
+
+@bp.post("/api/transfers/<int:transfer_id>")
+def transfer_action(transfer_id):
+    body = request.json or {}
+    if body.get("action") != "link":
+        return jsonify(error="Unknown action"), 400
+    with connect() as db:
+        found = db.execute("SELECT id FROM transfers WHERE id = ?", (transfer_id,)).fetchone()
+        if not found:
+            return jsonify(error="Transfer not found"), 404
+        db.execute("UPDATE transfers SET purchase_order = ? WHERE id = ?", (str(body.get("purchase_order") or "").strip(), transfer_id))
+        row = dict(db.execute("SELECT * FROM transfers WHERE id = ?", (transfer_id,)).fetchone())
+    return jsonify(row)
 
 
 @bp.post("/api/transfers")

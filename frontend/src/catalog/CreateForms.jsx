@@ -1,19 +1,150 @@
-import { Fragment, useMemo, useState } from 'react'
-import { Calendar, Hash, Image, Link2, MapPin, Search, StickyNote, Tag } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Building2, Calendar, ChevronLeft, Hash, Image, Link2, MapPin, Search, StickyNote, Tag, X } from 'lucide-react'
 import { Modal } from '../components/Modal.jsx'
 import { money } from '../lib/money.js'
 import { useJson } from '../lib/api.js'
 
-const PLACES = ['Nairobi', 'Kisumu', 'Mombasa']
-const SUPPLIERS = ['Korom Textiles', 'Mwotaji Ltd', 'Hawkeye Media']
+export const PLACES = ['Nairobi', 'Kisumu', 'Mombasa']
+export const SUPPLIERS = ['Korom Textiles', 'Mwotaji Ltd', 'Hawkeye Media']
+const DISCOUNTS = [0, 5, 10, 15, 20, 25]
 
 function code() {
   const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789'
   return Array.from({ length: 17 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
 }
 
-function lineFrom(item) {
-  return { inventory_id: item.id, title: `${item.product} · ${item.variant}`, qty: 1, price: item.price || 0, sku: item.sku || '' }
+export function lineFrom(item) {
+  return { inventory_id: item.id, title: `${item.product} · ${item.variant}`, qty: 1, price: 0, sku: item.sku || '', supplier_sku: '', discount: 0 }
+}
+
+export function lineTotal(line) {
+  const gross = Number(line.price || 0) * Number(line.qty || 0)
+  return Math.round(gross * (100 - Number(line.discount || 0)) / 100)
+}
+
+function centsFromInput(value) {
+  const number = Number(String(value).replace(/[^0-9.]/g, ''))
+  if (!Number.isFinite(number)) return 0
+  return Math.round(number * 100)
+}
+
+function splitTitle(title) {
+  const [product, variant = ''] = String(title || '').split(' · ')
+  return { product, variant }
+}
+
+function CostInput({ cents, onCommit, label }) {
+  const [text, setText] = useState((Number(cents || 0) / 100).toFixed(2))
+  useEffect(() => setText((Number(cents || 0) / 100).toFixed(2)), [cents])
+  return (
+    <input aria-label={label} value={text} onChange={e => setText(e.target.value)} onBlur={() => onCommit(centsFromInput(text))} />
+  )
+}
+
+function QtyInput({ value, onCommit, label }) {
+  const [text, setText] = useState(String(value || 1))
+  useEffect(() => setText(String(value || 1)), [value])
+  return (
+    <input className="qty-input" aria-label={label} inputMode="numeric" value={text} onChange={e => setText(e.target.value.replace(/[^\d]/g, ''))} onBlur={() => onCommit(Math.max(1, Number(text) || 1))} />
+  )
+}
+
+function SkuInput({ value, onCommit, label }) {
+  const [text, setText] = useState(value || '')
+  useEffect(() => setText(value || ''), [value])
+  return (
+    <input className="sku-input" aria-label={label} value={text} onChange={e => setText(e.target.value)} onBlur={() => { if (text !== (value || '')) onCommit(text) }} />
+  )
+}
+
+export function RouteFields({ supplier, destination, onSupplier, onDestination, locked, onEdit, onDone }) {
+  if (locked) {
+    return (
+      <div className="route-row">
+        <Building2 size={16} />
+        <span>{supplier}</span>
+        <span aria-hidden="true">→</span>
+        <MapPin size={16} />
+        <span>{destination || 'Select destination'}</span>
+        <button type="button" className="ghost route-edit" onClick={onEdit}>Edit</button>
+      </div>
+    )
+  }
+  return (
+    <div className="route-row">
+      <Building2 size={16} />
+      <select aria-label="Supplier" value={supplier} onChange={e => onSupplier(e.target.value)}>
+        <option value="">Select supplier</option>
+        {SUPPLIERS.map(name => <option key={name}>{name}</option>)}
+      </select>
+      <span aria-hidden="true">→</span>
+      <MapPin size={16} />
+      <select aria-label="Destination" value={destination} onChange={e => onDestination(e.target.value)}>
+        <option value="">Select destination</option>
+        {PLACES.map(place => <option key={place}>{place}</option>)}
+      </select>
+      {onDone && <button type="button" className="ghost route-edit" onClick={onDone}>Done</button>}
+    </div>
+  )
+}
+
+export function PurchaseLines({ inventory, lines, destination, locked, onChange, onRemove, onAdd }) {
+  return (
+    <>
+      {lines.length > 0 && <table className="po-table">
+        <thead>
+          <tr><th>Products</th><th>Supplier SKU</th><th>Qty</th><th>Cost</th><th>Total</th></tr>
+        </thead>
+        <tbody>
+          {lines.map(line => {
+            const { product, variant } = splitTitle(line.title)
+            const name = variant ? `${product} ${variant}` : product
+            return (
+              <tr key={line.inventory_id}>
+                <td>
+                  <div className="po-product">
+                    <span className="thumb" />
+                    <div>
+                      <strong>{product}</strong>
+                      {variant && <span className="variant-pill">{variant}</span>}
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  {locked
+                    ? (line.supplier_sku || '')
+                    : <SkuInput label={`Supplier SKU for ${name}`} value={line.supplier_sku} onCommit={supplier_sku => onChange({ ...line, supplier_sku })} />}
+                </td>
+                <td>
+                  {locked
+                    ? line.qty
+                    : <QtyInput label={`Quantity for ${name}`} value={line.qty} onCommit={qty => onChange({ ...line, qty })} />}
+                </td>
+                <td>
+                  {locked ? (
+                    <span>{money(line.price || 0)} {line.discount || 0}%</span>
+                  ) : (
+                    <span className="cost-field">
+                      <span>KES</span>
+                      <CostInput label={`Cost for ${name}`} cents={line.price} onCommit={price => onChange({ ...line, price })} />
+                      <select aria-label={`Discount for ${name}`} value={line.discount || 0} onChange={e => onChange({ ...line, discount: Number(e.target.value) })}>
+                        {DISCOUNTS.map(rate => <option key={rate} value={rate}>{rate}%</option>)}
+                      </select>
+                    </span>
+                  )}
+                </td>
+                <td>
+                  <span className="line-total">{money(lineTotal(line))}</span>
+                  {!locked && <button type="button" className="icon-btn" aria-label={`Remove ${name}`} onClick={() => onRemove(line.inventory_id)}><X size={14} /></button>}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>}
+      {!locked && <AddProducts inventory={inventory} lines={lines} destination={destination} onAdd={onAdd} hideLines />}
+    </>
+  )
 }
 
 function atDestination(item, destination) {
@@ -190,81 +321,79 @@ export function CreatePurchaseOrder({ onOpen, onSaved }) {
   const [reference, setReference] = useState('')
   const [note, setNote] = useState('')
   const [terms, setTerms] = useState('')
-  const [tags, setTags] = useState('')
   const [lines, setLines] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const units = lines.reduce((sum, line) => sum + line.qty, 0)
-  const total = lines.reduce((sum, line) => sum + line.price * line.qty, 0)
+  const units = lines.reduce((sum, line) => sum + Number(line.qty || 0), 0)
+  const total = lines.reduce((sum, line) => sum + lineTotal(line), 0)
   const add = items => setLines(prev => {
     const incoming = Array.isArray(items) ? items : [items]
     const ids = new Set(prev.map(line => line.inventory_id))
     return [...prev, ...incoming.filter(item => !ids.has(item.id)).map(lineFrom)]
   })
+  const leave = () => onOpen('purchase-orders')
   const save = e => {
     e.preventDefault()
     if (!supplier) { setError('Select a supplier.'); return }
     setBusy(true)
     fetch('/api/purchase-orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ supplier, destination, reference, note, terms, currency: 'KES', tags, lines }),
+      body: JSON.stringify({ supplier, destination, reference, note, terms, currency: 'KES', tags: '', lines }),
     }).then(async r => {
       if (!r.ok) throw new Error((await r.json()).error || 'Could not save')
       const created = await r.json()
       onSaved()
-      onOpen('purchase-orders', { po: created.id })
+      onOpen('purchase-orders', { po: created.id, notice: 'created' })
     }).catch(err => { setError(err.message); setBusy(false) })
   }
   return (
     <form className="order-page" onSubmit={save}>
-      <div className="crumb">
-        <button type="button" className="text-link" onClick={() => onOpen('purchase-orders')}>Purchase orders</button>
-        <span>/</span><span>Create purchase order</span>
+      <div className="po-top">
+        <button type="button" className="icon-btn" aria-label="Purchase orders" onClick={leave}><ChevronLeft size={18} /></button>
+        <div className="po-top-mid">
+          <div className="save-bar">
+            <span>Unsaved changes</span>
+            <button type="button" className="ghost" onClick={leave}>Discard</button>
+            <button type="submit" className="solid" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+          </div>
+        </div>
       </div>
-      <div className="product-head">
-        <h1>Create purchase order</h1>
-        <button type="submit" className="solid" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-      </div>
+      <div className="po-heading"><h1>Create purchase order</h1></div>
       {error && <p className="form-error">{error}</p>}
       <div className="order-grid">
-        <div>
-          <section className="detail-card route-card">
-            <MapPin size={16} />
-            <select value={supplier} onChange={e => setSupplier(e.target.value)} aria-label="Supplier">
-              <option value="">Select supplier</option>
-              {SUPPLIERS.map(name => <option key={name}>{name}</option>)}
-            </select>
-            <span>→</span>
-            <MapPin size={16} />
-            <select value={destination} onChange={e => setDestination(e.target.value)} aria-label="Destination">
-              <option value="">Select destination</option>
-              {PLACES.map(place => <option key={place}>{place}</option>)}
-            </select>
-          </section>
-          <AddProducts inventory={inventory} lines={lines} destination={destination} onAdd={add} />
-        </div>
+        <section className="detail-card po-card">
+          <RouteFields supplier={supplier} destination={destination} onSupplier={setSupplier} onDestination={setDestination} />
+          <PurchaseLines
+            inventory={inventory}
+            lines={lines}
+            destination={destination}
+            onAdd={add}
+            onChange={next => setLines(prev => prev.map(line => line.inventory_id === next.inventory_id ? next : line))}
+            onRemove={id => setLines(prev => prev.filter(line => line.inventory_id !== id))}
+          />
+        </section>
         <aside className="order-side">
           <section className="detail-card">
             <h2>Cost summary</h2>
             <table className="money-table">
               <tbody>
-                <tr><td>Order details</td><td>{lines.length} variants ({units} items)</td></tr>
-                <tr><td>Taxes (Included)</td><td>KES 0.00</td></tr>
-                <tr className="total-row"><td>Total</td><td>{money(total)}</td></tr>
+                <tr><td>Order details</td><td className="muted">{lines.length} variants ({units} items)</td><td>{money(total)}</td></tr>
+                <tr><td>Taxes (Included)</td><td /><td>KES 0.00</td></tr>
+                <tr className="total-row"><td>Total</td><td /><td>{money(total)}</td></tr>
               </tbody>
             </table>
           </section>
           <section className="detail-card">
             <h2>Purchase order details</h2>
             <label className="field">Reference number
-              <input value={reference} maxLength={255} onChange={e => setReference(e.target.value)} />
+              <input aria-label="Reference number" value={reference} maxLength={255} onChange={e => setReference(e.target.value)} />
               <small className="muted">{reference.length}/255</small>
             </label>
             <label className="field">Note to supplier
-              <textarea value={note} maxLength={5000} onChange={e => setNote(e.target.value)} />
+              <textarea aria-label="Note to supplier" value={note} maxLength={5000} onChange={e => setNote(e.target.value)} />
               <small className="muted">{note.length}/5000</small>
             </label>
-            <div className="orders-actions">
+            <div className="terms-row">
               <span>Terms</span>
               <select value={terms} onChange={e => setTerms(e.target.value)} aria-label="Terms">
                 <option value="">None</option>
@@ -275,18 +404,13 @@ export function CreatePurchaseOrder({ onOpen, onSaved }) {
               <select defaultValue="KES" aria-label="Currency"><option>KES</option></select>
             </div>
           </section>
-          <section className="detail-card">
-            <h2>Tags</h2>
-            <input value={tags} maxLength={40} onChange={e => setTags(e.target.value)} placeholder="Add tags" />
-            <small className="muted">{tags.length}/40</small>
-          </section>
         </aside>
       </div>
     </form>
   )
 }
 
-export function CreateTransfer({ onOpen, onSaved }) {
+export function CreateTransfer({ onOpen, onSaved, purchaseOrderId = '' }) {
   const [inventory] = useJson('/api/inventory')
   const [orders] = useJson('/api/purchase-orders')
   const [origin, setOrigin] = useState('')
@@ -294,7 +418,7 @@ export function CreateTransfer({ onOpen, onSaved }) {
   const [reference, setReference] = useState('')
   const [note, setNote] = useState('')
   const [tags, setTags] = useState('')
-  const [purchaseOrder, setPurchaseOrder] = useState('')
+  const [purchaseOrder, setPurchaseOrder] = useState(purchaseOrderId)
   const [lines, setLines] = useState([])
   const [openField, setOpenField] = useState('')
   const [error, setError] = useState('')

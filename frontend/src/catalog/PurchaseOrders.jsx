@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { Archive, AtSign, Check, ChevronDown, ChevronLeft, Copy, FileDown, FileSpreadsheet, Hash, Pencil, Smile, Trash2 } from 'lucide-react'
 import { useJson } from '../lib/api.js'
 import { csv } from '../lib/csv.js'
 import { money } from '../lib/money.js'
-import { AddProducts, CreatePurchaseOrder } from './CreateForms.jsx'
+import { CreatePurchaseOrder, PurchaseLines, RouteFields, lineFrom, lineTotal } from './CreateForms.jsx'
 import { EmptyCatalog, PoMark } from './ui.jsx'
 
 const STORE = {
@@ -17,6 +18,20 @@ function longDate(iso) {
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
+function dayLabel(iso) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  if (date.toDateString() === new Date().toDateString()) return 'Today'
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+}
+
+function clock(iso) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  if (Date.now() - date.getTime() < 60_000) return 'Just now'
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
 function linesOf(order) {
   try {
     const parsed = JSON.parse(order.lines || '[]')
@@ -26,12 +41,28 @@ function linesOf(order) {
   }
 }
 
-function PurchaseOrderDetail({ id, onOpen, onChanged }) {
+function commentsOf(order) {
+  try {
+    const parsed = JSON.parse(order.comments || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function PurchaseOrderDetail({ id, created, onOpen, onChanged }) {
   const [inventory] = useJson('/api/inventory')
+  const [transfers] = useJson('/api/transfers')
   const [order, setOrder] = useState(null)
   const [missing, setMissing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [toast, setToast] = useState(created ? { text: 'Purchase order created' } : null)
+  const [menu, setMenu] = useState('')
+  const [editingRoute, setEditingRoute] = useState(false)
+  const [editingDetails, setEditingDetails] = useState(false)
+  const [comment, setComment] = useState('')
+  const [tags, setTags] = useState('')
 
   useEffect(() => {
     let ignore = false
@@ -42,9 +73,37 @@ function PurchaseOrderDetail({ id, onOpen, onChanged }) {
       if (ignore) return
       if (!response.ok) { setMissing(true); return }
       setOrder(body)
+      setTags(body.tags || '')
     }).catch(() => { if (!ignore) setMissing(true) })
     return () => { ignore = true }
   }, [id])
+
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = setTimeout(() => setToast(null), 4000)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  useEffect(() => {
+    if (!menu) return undefined
+    const close = () => setMenu('')
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [menu])
+
+  const act = (action, extra = {}) => {
+    setBusy(true)
+    setError('')
+    return fetch(`/api/purchase-orders/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...extra }),
+    }).then(async response => {
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || 'Could not update the purchase order')
+      return body
+    }).catch(err => { setError(err.message); throw err }).finally(() => setBusy(false))
+  }
 
   if (missing) {
     return (
@@ -59,88 +118,202 @@ function PurchaseOrderDetail({ id, onOpen, onChanged }) {
 
   const lines = linesOf(order)
   const units = lines.reduce((sum, line) => sum + Number(line.qty || 0), 0)
-  const total = lines.reduce((sum, line) => sum + Number(line.price || 0) * Number(line.qty || 0), 0)
+  const total = lines.reduce((sum, line) => sum + lineTotal(line), 0)
   const ordered = order.status === 'ordered'
-  const skuFor = line => {
-    if (line.sku) return line.sku
-    const item = (inventory || []).find(row => row.id === line.inventory_id)
-    return item?.sku || ''
-  }
-  const addInventory = items => {
-    const incoming = (Array.isArray(items) ? items : [items]).filter(item => !lines.some(line => line.inventory_id === item.id))
-    if (ordered || !incoming.length) return
-    const next = [...lines, ...incoming.map(item => ({ inventory_id: item.id, title: `${item.product} · ${item.variant}`, qty: 1, price: item.price || 0, sku: item.sku || '' }))]
-    setBusy(true)
-    fetch(`/api/purchase-orders/${order.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'lines', lines: next }),
-    }).then(async response => {
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || 'Could not add the product')
-      setOrder(body)
-      onChanged()
-    }).catch(err => setError(err.message)).finally(() => setBusy(false))
-  }
+  const draft = order.status === 'draft'
+  const skuFor = line => line.supplier_sku || line.sku || ''
+  const saveLines = next => act('lines', { lines: next }).then(body => { setOrder(body); onChanged() }).catch(() => {})
+  const update = fields => act('update', fields).then(body => { setOrder(body); onChanged(); return body }).catch(() => {})
   const downloadCsv = () => csv([
     ['Purchase order', 'Date', 'Supplier', 'Ship to', 'Status', 'Product', 'Variant', 'SKU', 'Qty', 'Cost', 'Tax', 'Total', 'Reference', 'Notes', 'Terms', 'Currency'],
     ...lines.map(line => {
       const [product, variant = ''] = String(line.title || '').split(' · ')
       return [
         `#PO${order.id}`, longDate(order.created_at), order.supplier, order.destination || 'Nairobi',
-        'Ordered', product, variant, skuFor(line), line.qty, money(line.price || 0), '0%', money((line.price || 0) * (line.qty || 0)),
+        'Ordered', product, variant, skuFor(line), line.qty, money(line.price || 0), '0%', money(lineTotal(line)),
         order.reference || '', order.note || '', order.terms || 'None', order.currency || 'KES',
       ]
     }),
   ], `purchase-order-${order.id}.csv`)
-  const confirm = () => {
-    setBusy(true)
-    fetch(`/api/purchase-orders/${order.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'order' }),
-    }).then(async response => {
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || 'Could not confirm')
-      setOrder(body)
-      onChanged()
-    }).catch(err => setError(err.message)).finally(() => setBusy(false))
-  }
+  const events = [
+    { kind: 'event', body: 'You created this purchase order.', created_at: order.created_at },
+    ...commentsOf(order).map(item => ({ kind: 'comment', body: item.body, created_at: item.created_at })),
+  ]
+  let lastDay = ''
 
   return (
     <div className="order-page">
-      <div className="create-bar no-print">
-        <div className="order-title">
-          <div>
-            <div className="crumb">
-              <button type="button" className="text-link" onClick={() => onOpen('purchase-orders')}>Purchase orders</button>
-              <span className="muted">/</span>
-              <span>#PO{order.id}</span>
+      <div className="po-top no-print">
+        <button type="button" className="icon-btn" aria-label="Purchase orders" onClick={() => onOpen('purchase-orders')}><ChevronLeft size={18} /></button>
+        <div className="po-top-mid">
+          {toast && (
+            <div className={`save-bar ${toast.ok ? 'ok' : ''}`} role="status">
+              {toast.ok && <Check size={16} />}
+              <span>{toast.text}</span>
             </div>
-            <h1>#PO{order.id}</h1>
-          </div>
-          <span className={`tag ${ordered ? 'open' : 'quiet'}`}>{ordered ? 'Ordered' : 'Draft'}</span>
-        </div>
-        <div className="create-actions">
-          {ordered ? (
-            <>
-              <button type="button" className="ghost" onClick={downloadCsv}>Download CSV</button>
-              <button type="button" className="solid" onClick={() => window.print()}>Download PDF</button>
-            </>
-          ) : (
-            <button type="button" className="solid" disabled={busy} onClick={confirm}>{busy ? 'Saving…' : 'Mark as ordered'}</button>
           )}
         </div>
+        <div className="po-actions">
+          {draft && <button type="button" className="ghost" disabled={busy} onClick={() => act('delete').then(() => { onChanged(); onOpen('purchase-orders') }).catch(() => {})}>Delete</button>}
+          {ordered && (
+            <div className="menu" onClick={e => e.stopPropagation()}>
+              <button type="button" className="ghost" onClick={() => setMenu(menu === 'link' ? '' : 'link')}>Link transfer</button>
+              {menu === 'link' && (
+                <div className="menu-pop">
+                  {(transfers || []).map(transfer => (
+                    <button
+                      type="button"
+                      key={transfer.id}
+                      onClick={() => {
+                        setMenu('')
+                        fetch(`/api/transfers/${transfer.id}`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ action: 'link', purchase_order: order.id }),
+                        }).then(() => onOpen('transfers', { transfer: transfer.id }))
+                      }}
+                    >
+                      #{transfer.id} · {transfer.origin} → {transfer.destination}
+                    </button>
+                  ))}
+                  {transfers && transfers.length === 0 && <p className="muted">No transfers to link.</p>}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="menu" onClick={e => e.stopPropagation()}>
+            <button type="button" className="ghost" onClick={() => setMenu(menu === 'more' ? '' : 'more')}>More actions <ChevronDown size={14} /></button>
+            {menu === 'more' && (
+              <div className="menu-pop">
+                {ordered && <button type="button" onClick={() => { setMenu(''); window.print() }}><FileDown size={15} /> Export PDF</button>}
+                {ordered && <button type="button" onClick={() => { setMenu(''); downloadCsv() }}><FileSpreadsheet size={15} /> Export CSV</button>}
+                <button type="button" onClick={() => act('duplicate').then(body => { onChanged(); onOpen('purchase-orders', { po: body.id }) }).catch(() => {})}><Copy size={15} /> Duplicate</button>
+                {order.status !== 'archived' && <button type="button" onClick={() => act('archive').then(() => { onChanged(); onOpen('purchase-orders') }).catch(() => {})}><Archive size={15} /> Archive</button>}
+                <button type="button" className="danger" onClick={() => act('delete').then(() => { onChanged(); onOpen('purchase-orders') }).catch(() => {})}><Trash2 size={15} /> Delete purchase order</button>
+              </div>
+            )}
+          </div>
+          {draft && <button type="button" className="solid" disabled={busy} onClick={() => act('order').then(body => { setOrder(body); setToast({ text: 'Marked as ordered', ok: true }); onChanged() }).catch(() => {})}>{busy ? 'Saving…' : 'Mark as ordered'}</button>}
+          {ordered && <button type="button" className="solid" onClick={() => onOpen('transfers', { create: '1', po: order.id })}>Create transfer</button>}
+        </div>
+      </div>
+      <div className="po-heading no-print">
+        <h1>#PO{order.id}</h1>
+        <span className={`tag ${ordered ? 'done' : 'open'}`}>{ordered ? 'Ordered' : draft ? 'Draft' : 'Archived'}</span>
       </div>
       {error && <p className="form-error no-print">{error}</p>}
-      {!ordered && <p className="muted no-print">Search inventory to add a product. Mark the purchase order as ordered to download the PDF or CSV.</p>}
-      {!ordered && (
-        <section className="detail-card no-print">
-          <h2>Add from inventory</h2>
-          <AddProducts inventory={inventory} lines={lines} destination={order.destination} onAdd={addInventory} hideLines />
-        </section>
-      )}
-      <article className="po-sheet">
+      <div className="order-grid no-print">
+        <div>
+          <section className="detail-card po-card">
+            <RouteFields
+              supplier={order.supplier}
+              destination={order.destination}
+              locked={ordered && !editingRoute}
+              onEdit={() => setEditingRoute(true)}
+              onDone={editingRoute ? () => setEditingRoute(false) : undefined}
+              onSupplier={value => update({ supplier: value })}
+              onDestination={value => update({ destination: value })}
+            />
+            <PurchaseLines
+              inventory={inventory}
+              lines={lines}
+              destination={order.destination}
+              locked={!draft}
+              onAdd={items => {
+                const incoming = (Array.isArray(items) ? items : [items]).filter(item => !lines.some(line => line.inventory_id === item.id))
+                if (incoming.length) saveLines([...lines, ...incoming.map(lineFrom)])
+              }}
+              onChange={next => saveLines(lines.map(line => line.inventory_id === next.inventory_id ? next : line))}
+              onRemove={itemId => saveLines(lines.filter(line => line.inventory_id !== itemId))}
+            />
+          </section>
+          <section className="detail-card">
+            <h2 className="timeline-title">Timeline</h2>
+            <div className="composer">
+              <span className="avatar" aria-hidden="true">MA</span>
+              <textarea aria-label="Leave a comment" value={comment} onChange={e => setComment(e.target.value)} placeholder="Leave a comment…" />
+              <div className="composer-tools">
+                <button type="button" aria-label="Emoji" onClick={() => setComment(value => `${value}:)`)}><Smile size={15} /></button>
+                <button type="button" aria-label="Mention" onClick={() => setComment(value => `${value}@`)}><AtSign size={15} /></button>
+                <button type="button" aria-label="Reference" onClick={() => setComment(value => `${value}#`)}><Hash size={15} /></button>
+                <button type="button" className="ghost" disabled={busy || !comment.trim()} onClick={() => act('comment', { body: comment.trim() }).then(body => { setOrder(body); setComment(''); onChanged() }).catch(() => {})}>Post</button>
+              </div>
+            </div>
+            <p className="staff-note">Only you and other staff can see comments</p>
+            <ul className="timeline">
+              {events.map(event => {
+                const day = dayLabel(event.created_at)
+                const showDay = day !== lastDay
+                lastDay = day
+                return (
+                  <li key={`${event.kind}-${event.created_at}-${event.body}`}>
+                    {showDay && <p className="day">{day}</p>}
+                    <div className={`event ${event.kind}`}>
+                      {event.kind === 'comment' ? <span className="avatar sm">MA</span> : <i />}
+                      <p>{event.body}</p>
+                      <time>{clock(event.created_at)}</time>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        </div>
+        <aside className="order-side">
+          <section className="detail-card">
+            <div className="card-title">
+              <h2>Cost summary</h2>
+            </div>
+            <table className="money-table">
+              <tbody>
+                <tr><td>Order details</td><td className="muted">{lines.length} variants ({units} items)</td><td>{money(total)}</td></tr>
+                <tr><td>Taxes (Included)</td><td /><td>KES 0.00</td></tr>
+                <tr className="total-row"><td>Total</td><td /><td>{money(total)}</td></tr>
+              </tbody>
+            </table>
+          </section>
+          <section className="detail-card">
+            <div className="card-title">
+              <h2>Purchase order details</h2>
+              <button type="button" className="icon-btn" aria-label="Edit purchase order details" onClick={() => setEditingDetails(open => !open)}><Pencil size={15} /></button>
+            </div>
+            <p className="detail-line"><span>Date created</span><b>{(order.created_at || '').slice(0, 10)}</b></p>
+            {editingDetails ? (
+              <>
+                <label className="field">Reference number
+                  <input aria-label="Reference number" defaultValue={order.reference || ''} maxLength={255} onBlur={e => update({ reference: e.target.value })} />
+                </label>
+                <label className="field">Note to supplier
+                  <textarea aria-label="Note to supplier" defaultValue={order.note || ''} maxLength={5000} onBlur={e => update({ note: e.target.value })} />
+                </label>
+                <div className="terms-row">
+                  <span>Terms</span>
+                  <select aria-label="Terms" defaultValue={order.terms || ''} onChange={e => update({ terms: e.target.value })}>
+                    <option value="">None</option>
+                    <option>Due on receipt</option>
+                    <option>Net 30</option>
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="detail-line"><span>Reference number</span><b>{order.reference || 'None'}</b></p>
+                <p className="detail-line"><span>Note to supplier</span><b>{order.note || 'None'}</b></p>
+                <div className="terms-row">
+                  <span>Terms</span><b>{order.terms || 'None'}</b>
+                  <span>Currency</span><b>{order.currency || 'KES'}</b>
+                </div>
+              </>
+            )}
+          </section>
+          <section className="detail-card">
+            <h2>Tags</h2>
+            <input aria-label="Tags" value={tags} maxLength={40} onChange={e => setTags(e.target.value)} onBlur={() => { if (tags !== (order.tags || '')) update({ tags }) }} />
+            <small className="muted">{tags.length}/40</small>
+          </section>
+        </aside>
+      </div>
+      <article className="po-sheet print-only">
         <header className="po-brand">
           <strong>{STORE.name}</strong>
           <div>
@@ -182,11 +355,10 @@ function PurchaseOrderDetail({ id, onOpen, onChanged }) {
                   <td>{line.qty}</td>
                   <td>{money(line.price || 0)}</td>
                   <td>0%</td>
-                  <td>{money((line.price || 0) * (line.qty || 0))}</td>
+                  <td>{money(lineTotal(line))}</td>
                 </tr>
               )
             })}
-            {lines.length === 0 && <tr><td colSpan={6} className="muted">No products on this purchase order.</td></tr>}
           </tbody>
         </table>
         <div className="po-summary">
@@ -219,21 +391,20 @@ function PurchaseOrderDetail({ id, onOpen, onChanged }) {
 export function PurchaseOrders({ onOpen, focus = {} }) {
   const [rows, reload] = useJson('/api/purchase-orders')
   if (focus.create === '1') return <CreatePurchaseOrder onOpen={onOpen} onSaved={reload} />
-  if (focus.po) return <PurchaseOrderDetail id={focus.po} onOpen={onOpen} onChanged={reload} />
+  if (focus.po) return <PurchaseOrderDetail key={focus.po} id={focus.po} created={focus.notice === 'created'} onOpen={onOpen} onChanged={reload} />
   if (!rows) return <p className="muted">Loading purchase orders…</p>
-  if (rows.length === 0) {
+  const visible = rows.filter(row => row.status !== 'archived')
+  if (visible.length === 0) {
     return (
-      <>
-        <EmptyCatalog
-          title="Purchase orders"
-          heading="Manage your purchase orders"
-          text="Track and receive inventory ordered from suppliers."
-          learn="Learn more about purchase orders"
-          href="https://help.shopify.com/en/manual/products/inventory/purchase-orders"
-          onAction={() => onOpen('purchase-orders', { create: '1' })}
-          mark={<PoMark />}
-        />
-      </>
+      <EmptyCatalog
+        title="Purchase orders"
+        heading="Manage your purchase orders"
+        text="Track and receive inventory ordered from suppliers."
+        learn="Learn more about purchase orders"
+        href="https://help.shopify.com/en/manual/products/inventory/purchase-orders"
+        onAction={() => onOpen('purchase-orders', { create: '1' })}
+        mark={<PoMark />}
+      />
     )
   }
   return (
@@ -246,7 +417,7 @@ export function PurchaseOrders({ onOpen, focus = {} }) {
         <table>
           <thead><tr><th>Purchase order</th><th>Supplier</th><th>Status</th><th>Date</th></tr></thead>
           <tbody>
-            {rows.map(r => (
+            {visible.map(r => (
               <tr key={r.id} className="clickable" onClick={() => onOpen('purchase-orders', { po: r.id })}>
                 <td><button type="button" className="text-link">#PO{r.id}</button></td>
                 <td>{r.supplier}</td>
