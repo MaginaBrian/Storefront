@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, Copy, Eye, Image, Plus, Search, Trash2 } from 'lucide-react'
+import { useJson } from '../lib/api.js'
 import { money } from '../lib/money.js'
 
 const LOCATIONS = ['Nairobi', 'Kisumu', 'Mombasa']
@@ -13,9 +14,16 @@ export default function VariantEditor({ item, rows, onOpen, onChanged }) {
   const [history, setHistory] = useState(false)
   const [skuOpen, setSkuOpen] = useState(false)
   const [costOpen, setCostOpen] = useState(false)
+  const [draft, setDraft] = useState(null)
+  const [products] = useJson('/api/products')
+  const product = (products || []).find(row => row.title === item.product)
+  const options = useMemo(() => {
+    try { return JSON.parse(product?.extra || '{}').options || [] } catch { return [] }
+  }, [product])
+  useEffect(() => { setDraft(null) }, [item.id])
   const siblings = useMemo(() => (rows || []).filter(r => r.product === item.product), [rows, item.product])
   const shown = siblings.filter(r => {
-    if (colorFilter && r.variant !== item.variant) return false
+    if (colorFilter && (options.length ? r.option1 !== item.option1 : r.variant !== item.variant)) return false
     const q = query.trim().toLowerCase()
     return !q || r.variant.toLowerCase().includes(q)
   })
@@ -31,7 +39,7 @@ export default function VariantEditor({ item, rows, onOpen, onChanged }) {
     onChanged()
     if (body.id !== item.id) onOpen('inventory', { item: body.id })
     return body
-  })
+  }).catch(err => setNotice(err.message))
 
   const shillings = (item.price / 100).toFixed(2)
   const kilos = (item.weight / 1000).toFixed(1)
@@ -51,7 +59,10 @@ export default function VariantEditor({ item, rows, onOpen, onChanged }) {
         </div>
         <div className="orders-actions">
           <button type="button" className="ghost" onClick={() => setPreview(p => !p)}><Eye size={14} /> View as</button>
-          <button type="button" className="ghost" onClick={() => act('duplicate').then(() => setNotice('Variant duplicated.'))}><Copy size={14} /> Duplicate</button>
+          <button type="button" className="ghost" onClick={() => {
+            if (options.length) setDraft({ option1: item.option1 || '', option2: item.option2 || '', option3: item.option3 || '' })
+            else setDraft({ variant: `${item.variant} copy` })
+          }}><Copy size={14} /> Duplicate</button>
           <div className="menu">
             <button type="button" className="ghost" aria-expanded={menu} onClick={() => setMenu(o => !o)}>More actions <ChevronDown size={14} /></button>
             {menu && (
@@ -64,6 +75,24 @@ export default function VariantEditor({ item, rows, onOpen, onChanged }) {
         </div>
       </div>
       {notice && <p className="notice">{notice}</p>}
+      {draft && (
+        <form className="detail-card tag-form" onSubmit={event => {
+          event.preventDefault()
+          act('duplicate', draft).then(body => { if (!body) return; setDraft(null); setNotice('Variant duplicated.') })
+        }}>
+          <p className="muted">Change at least one option value. An exact copy cannot be saved.</p>
+          {options.length ? options.map((option, index) => (
+            <label key={option.name} className="field">{option.name}
+              <input aria-label={`Duplicate ${option.name}`} value={draft[`option${index + 1}`] || ''} onChange={e => setDraft(current => ({ ...current, [`option${index + 1}`]: e.target.value }))} />
+            </label>
+          )) : (
+            <label className="field">Variant
+              <input aria-label="Duplicate variant name" value={draft.variant || ''} onChange={e => setDraft(current => ({ ...current, variant: e.target.value }))} />
+            </label>
+          )}
+          <button type="submit" className="solid">Save duplicate</button>
+        </form>
+      )}
       {preview && <section className="detail-card preview-card"><h2>{item.variant}</h2><p>{item.product}</p><p>{money(item.price)}</p><p className="muted">{item.available} available in {item.location}</p></section>}
       <div className="variant-layout">
         <aside className="detail-card variant-nav">
@@ -77,7 +106,7 @@ export default function VariantEditor({ item, rows, onOpen, onChanged }) {
           </div>
           <label className="finder"><Search size={15} /><input placeholder="Search variants" value={query} onChange={e => setQuery(e.target.value)} /></label>
           <div className="orders-actions">
-            <button type="button" className="ghost" onClick={() => setColorFilter(o => !o)}>Color <ChevronDown size={12} /></button>
+            <button type="button" className="ghost" onClick={() => setColorFilter(o => !o)}>{options[0]?.name || 'Variant'} <ChevronDown size={12} /></button>
             <button type="button" className="ghost" onClick={() => onOpen('orders', { channel: 'Online Store' })}>Sales channels <ChevronDown size={12} /></button>
           </div>
           <p className="muted">{shown.length} variants</p>
@@ -95,14 +124,25 @@ export default function VariantEditor({ item, rows, onOpen, onChanged }) {
           <section className="detail-card variant-hero">
             <div className="swatch"><Plus size={18} /></div>
             <div>
-              <input className="variant-name" defaultValue={item.variant} key={item.variant} onBlur={e => { if (e.target.value.trim() && e.target.value.trim() !== item.variant) act('update', { variant: e.target.value.trim() }) }} />
+              {options.length
+                ? <h2>{item.variant}</h2>
+                : <input className="variant-name" defaultValue={item.variant} key={item.variant} onBlur={e => { if (e.target.value.trim() && e.target.value.trim() !== item.variant) act('update', { variant: e.target.value.trim() }) }} />}
               <p><button type="button" className="text-link" onClick={() => onOpen('orders', { channel: 'Online Store' })}>All channels</button> · None</p>
             </div>
           </section>
           <section className="detail-card">
-            <label className="field">Color
-              <span className="color-chip">{item.variant}</span>
-            </label>
+            {options.length ? options.map((option, index) => (
+              <label key={option.name} className="field">{option.name}
+                <input defaultValue={item[`option${index + 1}`] || ''} key={`${item.id}-${option.name}-${item[`option${index + 1}`] || ''}`} onBlur={e => {
+                  const next = e.target.value.trim()
+                  if (next && next !== (item[`option${index + 1}`] || '')) act('update', { [`option${index + 1}`]: next })
+                }} />
+              </label>
+            )) : (
+              <label className="field">Variant
+                <span className="color-chip">{item.variant}</span>
+              </label>
+            )}
           </section>
           <section className="detail-card">
             <label className="field">Price
@@ -153,7 +193,16 @@ export default function VariantEditor({ item, rows, onOpen, onChanged }) {
               <span className="muted">Sell when out of stock {item.continue_selling ? 'On' : 'Off'}</span>
               <button type="button" className="ghost" onClick={() => act('update', { continue_selling: !item.continue_selling })}>{item.continue_selling ? 'Turn off' : 'Turn on'}</button>
             </div>
-            {skuOpen && <p>{item.sku || 'No SKU'}</p>}
+            {skuOpen && (
+              <div className="price-grid">
+                <label className="field">SKU
+                  <input defaultValue={item.sku || ''} key={`${item.id}-sku-${item.sku || ''}`} onBlur={e => { if (e.target.value.trim() !== (item.sku || '')) act('update', { sku: e.target.value.trim() }) }} />
+                </label>
+                <label className="field">Barcode
+                  <input defaultValue={item.barcode || ''} key={`${item.id}-barcode-${item.barcode || ''}`} onBlur={e => { if (e.target.value.trim() !== (item.barcode || '')) act('update', { barcode: e.target.value.trim() }) }} />
+                </label>
+              </div>
+            )}
           </section>
           <section className="detail-card">
             <div className="card-title">
@@ -177,8 +226,22 @@ export default function VariantEditor({ item, rows, onOpen, onChanged }) {
               }} /><b>kg</b></span>
             </label>
             <div className="orders-actions">
-              <select className="ghost-select" defaultValue=""><option value="">Country of origin</option><option>Kenya</option></select>
-              <select className="ghost-select" defaultValue=""><option value="">HS Code</option><option>6001.22</option></select>
+              <label className="field">Country of origin
+                <select value={item.origin || ''} onChange={e => act('update', { origin: e.target.value })}>
+                  <option value="">Country of origin</option>
+                  <option>Kenya</option>
+                  <option>Uganda</option>
+                  <option>Tanzania</option>
+                </select>
+              </label>
+              <label className="field">HS code
+                <select value={item.hs_code || ''} onChange={e => act('update', { hs_code: e.target.value })}>
+                  <option value="">HS code</option>
+                  <option>6001.22</option>
+                  <option>6205.20</option>
+                  <option>4202.91</option>
+                </select>
+              </label>
             </div>
           </section>
           <div className="orders-actions">

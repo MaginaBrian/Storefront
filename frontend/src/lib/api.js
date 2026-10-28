@@ -11,7 +11,10 @@ export function useJson(path) {
 
 export function useApi(path) {
   const [data, setData] = useState(null)
-  const load = () => request(path).then(setData).catch(() => {})
+  const load = () => {
+    if (!path) { setData(null); return Promise.resolve(null) }
+    return request(path).then(setData).catch(() => {})
+  }
   useEffect(() => { load() }, [path])
   return [data, load]
 }

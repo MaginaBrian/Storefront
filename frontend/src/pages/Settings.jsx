@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronRight, Ellipsis, MapPin, Search, Store } from 'lucide-react'
 import { useJson } from '../lib/api.js'
 import { money } from '../lib/money.js'
+import { UsersAdmin } from './Users.jsx'
 
 const SECTIONS = [
   ['general', 'General'],
@@ -14,6 +15,7 @@ const SECTIONS = [
   ['domains', 'Domains'],
   ['notifications', 'Notifications'],
   ['content', 'Content'],
+  ['users', 'Users'],
 ]
 
 const FULFILL = [
@@ -26,12 +28,17 @@ function valueOf(rows, key, fallback = '') {
   return rows?.find(row => row.key === key)?.value ?? fallback
 }
 
-export function Settings({ focus = {}, onOpen }) {
+export function Settings({ focus = {}, onOpen, access }) {
   const [rows, reload] = useJson('/api/settings')
   const [store] = useJson('/api/store')
   const [query, setQuery] = useState('')
-  const section = SECTIONS.some(([id]) => id === focus.section) ? focus.section : 'general'
-  const shown = SECTIONS.filter(([, label]) => label.toLowerCase().includes(query.trim().toLowerCase()))
+  const visible = SECTIONS.filter(([id]) => {
+    if (!access) return true
+    if (id === 'users') return access.includes('users')
+    return access.includes('settings')
+  })
+  const section = visible.some(([id]) => id === focus.section) ? focus.section : (visible[0]?.[0] || 'general')
+  const shown = visible.filter(([, label]) => label.toLowerCase().includes(query.trim().toLowerCase()))
   const name = valueOf(rows, 'entity_name', 'Maison')
   return (
     <div className="settings-layout">
@@ -48,9 +55,11 @@ export function Settings({ focus = {}, onOpen }) {
           <button type="button" key={id} className={section === id ? 'on' : ''} onClick={() => onOpen('settings', { section: id })}>{label}</button>
         ))}
       </aside>
-      {section === 'general'
-        ? <General rows={rows} store={store} onOpen={onOpen} onSaved={reload} />
-        : <Section id={section} rows={rows} store={store} onOpen={onOpen} />}
+      {section === 'users' || focus.roles === '1' || focus.role || (focus.add === '1' && focus.section === 'users')
+        ? <UsersAdmin focus={focus} onOpen={onOpen} />
+        : section === 'general'
+          ? <General rows={rows} store={store} onOpen={onOpen} onSaved={reload} />
+          : <Section id={section} rows={rows} store={store} onOpen={onOpen} />}
     </div>
   )
 }

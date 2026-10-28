@@ -204,6 +204,43 @@ class Metaobject(Model):
             definition_id = cur.lastrowid
         return query("SELECT * FROM meta_definitions WHERE id = ?", (definition_id,))[0]
 
+    @classmethod
+    def create_entry(cls, fields):
+        with connect() as db:
+            taken = db.execute(
+                "SELECT 1 FROM meta_entries WHERE kind = ? AND lower(name) = lower(?)",
+                (fields["kind"], fields["name"]),
+            ).fetchone()
+            if taken:
+                raise ValidationError(f"{fields['name']} is already a {fields['kind']} entry")
+            cur = db.execute(
+                "INSERT INTO meta_entries (name, kind, swatch, status) VALUES (?, ?, ?, 'active')",
+                (fields["name"], fields["kind"], fields["swatch"]),
+            )
+            entry_id = cur.lastrowid
+        return query("SELECT * FROM meta_entries WHERE id = ?", (entry_id,))[0]
+
+    @classmethod
+    def update_entry(cls, entry_id, fields):
+        from models.variants import rename_connected_color
+        with connect() as db:
+            current = db.execute("SELECT * FROM meta_entries WHERE id = ?", (entry_id,)).fetchone()
+            if not current:
+                raise ValidationError("That entry was not found", 404)
+            taken = db.execute(
+                "SELECT 1 FROM meta_entries WHERE kind = ? AND lower(name) = lower(?) AND id != ?",
+                (current["kind"], fields["name"], entry_id),
+            ).fetchone()
+            if taken:
+                raise ValidationError(f"{fields['name']} is already a {current['kind']} entry")
+            db.execute(
+                "UPDATE meta_entries SET name = ?, swatch = ? WHERE id = ?",
+                (fields["name"], fields["swatch"] or current["swatch"], entry_id),
+            )
+            if current["kind"] == "Color" and current["name"] != fields["name"]:
+                rename_connected_color(db, current["name"], fields["name"])
+        return query("SELECT * FROM meta_entries WHERE id = ?", (entry_id,))[0]
+
 
 class Menu(Model):
     table = "menus"

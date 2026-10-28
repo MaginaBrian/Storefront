@@ -353,6 +353,10 @@ def load(db):
         "INSERT INTO catalog_items (name, detail, price, dest) VALUES (?, ?, ?, ?)",
         CATALOG_ITEMS,
     )
+    from models.variants import ensure_seeded_variants
+    ensure_seeded_variants(db)
+    from models.access import ensure_staff
+    ensure_staff(db)
 
 
 def main():

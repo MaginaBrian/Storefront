@@ -180,6 +180,14 @@ class FileSerializer(NamedSerializer):
         return {"name": name, "kind": self.text("kind") or "File", "source": self.text("source", limit=300)}
 
 
+class EntrySerializer(Serializer):
+    def validate(self):
+        name = self.text("name")
+        if not name:
+            raise ValidationError("Enter a name")
+        return {"name": name[:80], "kind": self.text("kind") or "Color", "swatch": self.text("swatch") or "#1c1c1c"}
+
+
 class DefinitionSerializer(NamedSerializer):
     message = "Enter a definition name."
     limit = 80

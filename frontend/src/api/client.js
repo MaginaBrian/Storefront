@@ -1,3 +1,13 @@
+const nativeFetch = window.fetch.bind(window)
+window.fetch = (input, init = {}) => {
+  const url = typeof input === 'string' ? input : input?.url || ''
+  if (!url.startsWith('/api/')) return nativeFetch(input, init)
+  const headers = new Headers(init.headers || (typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined))
+  const staff = localStorage.getItem('storefront-staff')
+  if (staff && !headers.has('X-Staff-Id')) headers.set('X-Staff-Id', staff)
+  return nativeFetch(input, { ...init, headers })
+}
+
 export class ApiError extends Error {
   constructor(message, status) {
     super(message)
@@ -6,11 +16,14 @@ export class ApiError extends Error {
 }
 
 export async function request(path, { method = 'GET', body, form } = {}) {
-  const options = { method }
+  const headers = {}
+  const staff = localStorage.getItem('storefront-staff')
+  if (staff) headers['X-Staff-Id'] = staff
+  const options = { method, headers }
   if (form) {
     options.body = form
   } else if (body !== undefined) {
-    options.headers = { 'Content-Type': 'application/json' }
+    headers['Content-Type'] = 'application/json'
     options.body = JSON.stringify(body)
   }
   const response = await fetch(path, options)

@@ -389,6 +389,12 @@ def migrate(db):
         ("tracked", "INTEGER NOT NULL DEFAULT 1"),
         ("physical", "INTEGER NOT NULL DEFAULT 1"),
         ("continue_selling", "INTEGER NOT NULL DEFAULT 0"),
+        ("option1", "TEXT NOT NULL DEFAULT ''"),
+        ("option2", "TEXT NOT NULL DEFAULT ''"),
+        ("option3", "TEXT NOT NULL DEFAULT ''"),
+        ("barcode", "TEXT NOT NULL DEFAULT ''"),
+        ("origin", "TEXT NOT NULL DEFAULT ''"),
+        ("hs_code", "TEXT NOT NULL DEFAULT ''"),
     ):
         _add_col(db, "inventory", name, decl)
     for name, decl in (
@@ -504,6 +510,10 @@ def migrate(db):
                 "INSERT INTO reports (name, category, last_viewed, created_by, pinned) VALUES (?, ?, ?, 'Piacì', 0)",
                 (name, category, today),
             )
+    from models.variants import ensure_seeded_variants
+    ensure_seeded_variants(db)
+    from models.access import ensure_staff
+    ensure_staff(db)
 
 
 def init_db():

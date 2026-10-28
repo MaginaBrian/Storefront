@@ -64,8 +64,36 @@ function ease(p, start) {
   return 1 - (1 - x) ** 3
 }
 
-export default function Home({ onOpen }) {
-  const [d] = useApi('/api/dashboard')
+function LimitedHome({ onOpen, access }) {
+  const cards = [
+    ['orders', 'Orders', 'The purchase: customer, products, quantities, prices, and discounts.'],
+    ['products', 'Products', 'What you sell, including variants, prices, and inventory.'],
+    ['customers', 'Customers', 'Who buys, and whether they come back.'],
+    ['discounts', 'Discounts', 'The offer on a product, an order, or shipping.'],
+    ['markets', 'Markets', 'Who you sell to, and the prices and catalog they see.'],
+    ['analytics', 'Analytics', 'What the orders and visits add up to.'],
+  ].filter(([key]) => access.includes(key))
+  return (
+    <div className="dash">
+      <div className="page-head">
+        <h1 className="title">Your work</h1>
+      </div>
+      <p className="muted">Your role opens only part of the store. Products are what you sell, customers are who buys, discounts are the offer, orders record the purchase, markets shape the experience, and analytics shows the result.</p>
+      <div className="permit-grid">
+        {cards.map(([key, label, detail]) => (
+          <button type="button" key={key} className="card" onClick={() => onOpen(key)}>
+            <strong>{label}</strong>
+            <small>{detail}</small>
+          </button>
+        ))}
+        {access.includes('products') && <button type="button" className="solid" onClick={() => onOpen('products', { add: '1' })}><Plus size={15} /> Add product</button>}
+      </div>
+    </div>
+  )
+}
+
+export default function Home({ onOpen, access }) {
+  const [d] = useApi(!access || access.includes('analytics') ? '/api/dashboard' : '')
   const [p, setP] = useState(0)
   const [grown, setGrown] = useState(false)
   useLayoutEffect(() => {
@@ -89,6 +117,7 @@ export default function Home({ onOpen }) {
   const kpis = d?.kpis || [0, 1, 2, 3].map(i => ({ label: '', value: '0', note: '', good: true, tone: ['green', 'amber', 'violet', 'red'][i] }))
   const week = d?.week || Array.from({ length: 7 }, () => ['', 0])
   const openKpi = label => onOpen(label === 'Orders' ? 'orders' : label === 'New customers' ? 'customers' : label === 'Low stock' ? 'products' : 'analytics', label === 'Low stock' ? { stock: 'low' } : undefined)
+  if (access && !access.includes('analytics')) return <LimitedHome onOpen={onOpen} access={access} />
   return (
     <div className="dash">
       <div className="page-head rise" style={{ animationDelay: '0ms' }}>

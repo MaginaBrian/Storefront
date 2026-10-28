@@ -1,8 +1,9 @@
 from pathlib import Path
 
-from flask import Flask, send_from_directory
+from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 
+from access import authorize
 from catalog import bp as catalog_bp
 from db import init_db
 from drafts import bp as drafts_bp
@@ -18,6 +19,12 @@ app.register_blueprint(drafts_bp)
 app.register_blueprint(catalog_bp)
 app.register_blueprint(store_bp)
 init_db()
+
+
+@app.before_request
+def staff_access():
+    if request.path.startswith("/api/"):
+        return authorize(request)
 
 
 @app.get("/api/health")

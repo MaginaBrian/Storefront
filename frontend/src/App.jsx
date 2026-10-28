@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { BarChart3, Globe, Inbox, Moon, Search, Sun, Tag, Users } from 'lucide-react'
 import CatalogSection from './catalog/index.jsx'
 import Home from './home/Home.jsx'
+import { allowed, storedStaff, useStaff } from './access.js'
 import { search as searchRecords } from './api/resources.js'
-import { useApi } from './lib/api.js'
+import { useApi, useJson } from './lib/api.js'
 import { ANALYTICS_VIEWS, CHANNELS, CUSTOMER_VIEWS, MARKET_VIEWS, NAV, PRODUCT_VIEWS, SETTINGS, readRoute } from './nav.js'
 import OrdersSection from './orders/index.jsx'
 import { AgenticPage, Analytics, Attribution, Autopilot, BlogPosts, Campaigns, Catalogs, Companies, Content, Customers, Discounts, Files, LiveView, Markets, Menus, Metaobjects, Products, Reports, Rollouts, Segments, Settings as SettingsPage, StorePage } from './pages/index.js'
@@ -29,9 +30,17 @@ export default function App() {
   const initial = readRoute()
   const [view, setViewState] = useState(initial.view)
   const [focus, setFocus] = useState(initial.focus)
-  const [summary, reloadSummary] = useApi('/api/orders/summary')
+  const [session] = useJson('/api/session')
+  const [who, setWho] = useState(false)
+  const stored = storedStaff()
+  const permissions = session?.permissions || (stored ? [] : null)
+  const can = key => permissions == null || permissions.includes(key)
+  const [summary, reloadSummary] = useApi(can('orders') ? '/api/orders/summary' : '')
   const [search, setSearch] = useState('')
   const [hits, setHits] = useState([])
+  useEffect(() => {
+    if (session?.id && !storedStaff()) localStorage.setItem('storefront-staff', String(session.id))
+  }, [session])
   useEffect(() => {
     const sync = () => {
       const route = readRoute()
@@ -73,7 +82,10 @@ export default function App() {
     setHits([])
   }
   const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }, { id: 'collections', label: 'Collections' }, { id: 'inventory', label: 'Inventory' }, { id: 'purchase-orders', label: 'Purchase orders' }, { id: 'transfers', label: 'Transfers' }, { id: 'gift-cards', label: 'Gift cards' }, { id: 'segments', label: 'Segments' }, { id: 'attribution', label: 'Attribution' }, { id: 'autopilot', label: 'Autopilot' }, { id: 'campaigns', label: 'Campaigns' }, { id: 'metaobjects', label: 'Metaobjects' }, { id: 'files', label: 'Files' }, { id: 'menus', label: 'Menus' }, { id: 'blog-posts', label: 'Blog posts' }, { id: 'catalogs', label: 'Catalogs' }, { id: 'rollouts', label: 'Rollouts' }, { id: 'reports', label: 'Reports' }, { id: 'live-view', label: 'Live View' }]
-  const pageHits = search.trim().length < 2 ? [] : pages.filter(p => p.label.toLowerCase().includes(search.trim().toLowerCase()))
+  const pageHits = search.trim().length < 2 ? [] : pages.filter(p => p.label.toLowerCase().includes(search.trim().toLowerCase()) && (permissions == null || allowed(p.id, permissions)))
+  const viewOk = permissions == null || allowed(view, permissions)
+  const visibleNav = NAV.filter(entry => can(entry.id))
+  const visibleChannels = CHANNELS.filter(entry => can(entry.id === 'store' ? 'online_store' : 'agentic'))
   const item = ({ id, label, icon: Icon }) => (
     <button key={id} className={`nav ${view === id ? 'on' : ''}`} onClick={() => setView(id)}>
       <Icon size={17} strokeWidth={1.6} />{label}
@@ -99,7 +111,7 @@ export default function App() {
             </div>
           )}
         </label>
-        <nav>{NAV.map(entry => entry.id === 'orders' ? (
+        <nav>{visibleNav.map(entry => entry.id === 'orders' ? (
           <div key="orders" className="nest">
             <button className={`nav ${view === 'orders' ? 'on' : ''}`} onClick={() => setView('orders')}>
               <Inbox size={17} strokeWidth={1.6} />Orders
@@ -153,39 +165,51 @@ export default function App() {
             </>}
           </div>
         ) : item(entry))}</nav>
-        <p className="group">Sales channels</p>
-        <nav>{CHANNELS.map(item)}</nav>
+        {visibleChannels.length > 0 && <p className="group">Sales channels</p>}
+        <nav>{visibleChannels.map(item)}</nav>
         <div className="foot">
+          <div className="user-menu">
+            <button type="button" className="nav" onClick={() => setWho(value => !value)}>{session?.name || 'Store owner'}</button>
+            {who && (session?.people || []).map(person => (
+              <button type="button" key={person.id} className={`sub ${person.id === session?.id ? 'on' : ''}`} onClick={() => useStaff(person.id)}>{person.name}</button>
+            ))}
+          </div>
           <ThemeToggle />
-          {item(SETTINGS)}
+          {(can('settings') || can('users')) && item(SETTINGS)}
         </div>
       </aside>
       <main className={view === 'home' ? 'home-stage' : undefined}>
-        {view === 'home' && <Home onOpen={setView} />}
-        {ordersOpen && <OrdersSection view={view} onChanged={reloadSummary} onOpen={setView} focus={focus} />}
-        {view === 'products' && <Products focus={focus} onOpen={setView} />}
-        {PRODUCT_VIEWS.includes(view) && <CatalogSection view={view} focus={focus} onOpen={setView} />}
-        {view === 'customers' && <Customers focus={focus} onOpen={setView} />}
-        {view === 'segments' && <Segments focus={focus} onOpen={setView} />}
-        {view === 'companies' && <Companies focus={focus} onOpen={setView} />}
-        {view === 'discounts' && <Discounts focus={focus} onOpen={setView} />}
-        {view === 'content' && <Content focus={focus} />}
-        {view === 'metaobjects' && <Metaobjects focus={focus} onOpen={setView} />}
-        {view === 'files' && <Files />}
-        {view === 'menus' && <Menus focus={focus} onOpen={setView} />}
-        {view === 'blog-posts' && <BlogPosts focus={focus} onOpen={setView} />}
-        {view === 'markets' && <Markets focus={focus} onOpen={setView} />}
-        {view === 'catalogs' && <Catalogs focus={focus} onOpen={setView} />}
-        {view === 'rollouts' && <Rollouts focus={focus} onOpen={setView} />}
-        {(view === 'growth' || view === 'attribution') && <Attribution focus={focus} onOpen={setView} />}
-        {view === 'autopilot' && <Autopilot onOpen={setView} />}
-        {view === 'campaigns' && <Campaigns focus={focus} onOpen={setView} />}
-        {view === 'analytics' && <Analytics onOpen={setView} />}
-        {view === 'reports' && <Reports focus={focus} onOpen={setView} />}
-        {view === 'live-view' && <LiveView onOpen={setView} />}
-        {view === 'store' && <StorePage onOpen={setView} />}
-        {view === 'agentic' && <AgenticPage onOpen={setView} />}
-        {view === 'settings' && <SettingsPage focus={focus} onOpen={setView} />}
+        {!viewOk && (
+          <section className="panel">
+            <h2>This area is limited</h2>
+            <p>Your role does not include this part of the store. The store owner and the Administrator role can open every area.</p>
+          </section>
+        )}
+        {viewOk && view === 'home' && <Home onOpen={setView} access={permissions} />}
+        {viewOk && ordersOpen && <OrdersSection view={view} onChanged={reloadSummary} onOpen={setView} focus={focus} />}
+        {viewOk && view === 'products' && <Products focus={focus} onOpen={setView} />}
+        {viewOk && PRODUCT_VIEWS.includes(view) && <CatalogSection view={view} focus={focus} onOpen={setView} />}
+        {viewOk && view === 'customers' && <Customers focus={focus} onOpen={setView} />}
+        {viewOk && view === 'segments' && <Segments focus={focus} onOpen={setView} />}
+        {viewOk && view === 'companies' && <Companies focus={focus} onOpen={setView} />}
+        {viewOk && view === 'discounts' && <Discounts focus={focus} onOpen={setView} />}
+        {viewOk && view === 'content' && <Content focus={focus} />}
+        {viewOk && view === 'metaobjects' && <Metaobjects focus={focus} onOpen={setView} />}
+        {viewOk && view === 'files' && <Files />}
+        {viewOk && view === 'menus' && <Menus focus={focus} onOpen={setView} />}
+        {viewOk && view === 'blog-posts' && <BlogPosts focus={focus} onOpen={setView} />}
+        {viewOk && view === 'markets' && <Markets focus={focus} onOpen={setView} />}
+        {viewOk && view === 'catalogs' && <Catalogs focus={focus} onOpen={setView} />}
+        {viewOk && view === 'rollouts' && <Rollouts focus={focus} onOpen={setView} />}
+        {viewOk && (view === 'growth' || view === 'attribution') && <Attribution focus={focus} onOpen={setView} />}
+        {viewOk && view === 'autopilot' && <Autopilot onOpen={setView} />}
+        {viewOk && view === 'campaigns' && <Campaigns focus={focus} onOpen={setView} />}
+        {viewOk && view === 'analytics' && <Analytics onOpen={setView} />}
+        {viewOk && view === 'reports' && <Reports focus={focus} onOpen={setView} />}
+        {viewOk && view === 'live-view' && <LiveView onOpen={setView} />}
+        {viewOk && view === 'store' && <StorePage onOpen={setView} />}
+        {viewOk && view === 'agentic' && <AgenticPage onOpen={setView} />}
+        {viewOk && view === 'settings' && <SettingsPage focus={focus} onOpen={setView} access={permissions} />}
       </main>
     </div>
   )

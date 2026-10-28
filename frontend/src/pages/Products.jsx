@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { useApi } from '../lib/api.js'
 import { money } from '../lib/money.js'
@@ -6,7 +7,8 @@ import ProductDetail from './ProductDetail.jsx'
 import { Sheet } from './ui.jsx'
 
 export function Products({ focus = {}, onOpen }) {
-  const [rows] = useApi('/api/products')
+  const [rows, reload] = useApi('/api/products')
+  useEffect(() => { if (!focus.product && focus.add !== '1') reload() }, [focus.product, focus.add])
   if (focus.add === '1') return <AddProduct onOpen={onOpen} gift={focus.gift === '1'} />
   const low = focus.stock === 'low'
   const visible = rows?.filter(r => !low || r.stock <= 14)
@@ -51,6 +53,7 @@ export function Products({ focus = {}, onOpen }) {
         columns={[
           { key: 'title', label: 'Product', render: r => <button type="button" className={`text-link ${r.title === focus.product ? 'on' : ''}`} onClick={() => onOpen('products', { product: r.title })}>{r.title}</button> },
           { key: 'price', label: 'Price', render: r => money(r.price) },
+          { key: 'variants', label: 'Variants', render: r => r.variants || 0 },
           { key: 'stock', label: 'In stock' },
           { key: 'sold', label: 'Sold' },
         ]}

@@ -27,6 +27,7 @@ function Switch({ on, label, onClick }) {
 
 export default function AddProduct({ onOpen, gift = false }) {
   const [collections] = useJson('/api/collections')
+  const [meta] = useJson('/api/metaobjects')
   const [library, setLibrary] = useState(null)
   const [title, setTitle] = useState(gift ? 'Gift card' : '')
   const [description, setDescription] = useState('')
@@ -63,6 +64,7 @@ export default function AddProduct({ onOpen, gift = false }) {
   const [optionName, setOptionName] = useState('')
   const [customOption, setCustomOption] = useState(false)
   const [optionValues, setOptionValues] = useState('')
+  const [fromColors, setFromColors] = useState(false)
   const [fields, setFields] = useState([])
   const [defining, setDefining] = useState(false)
   const [definition, setDefinition] = useState('')
@@ -91,11 +93,17 @@ export default function AddProduct({ onOpen, gift = false }) {
   const addOption = event => {
     event.preventDefault()
     const values = optionValues.split(',').map(part => part.trim()).filter(Boolean)
-    if (!optionName.trim() || !values.length) return
-    setOptions(current => current.some(option => option.name === optionName.trim()) ? current : [...current, { name: optionName.trim(), values }])
+    if (!optionName.trim() || !values.length || options.length >= 3) return
+    const name = optionName.trim()
+    if (options.some(option => option.name.toLowerCase() === name.toLowerCase())) return
+    const next = [...options, { name, values, source: fromColors ? 'color' : '' }]
+    const count = next.reduce((total, option) => total * option.values.length, 1)
+    if (count > 2048) { setError('A product can have up to 2,048 variants.'); return }
+    setOptions(next)
     setOptionValues('')
     setOptionName('')
     setCustomOption(false)
+    setFromColors(false)
     setOptionQuery('')
     setOptionOpen(false)
   }
@@ -104,6 +112,8 @@ export default function AddProduct({ onOpen, gift = false }) {
     event.preventDefault()
     const priceCents = price.trim() ? cents(price) : 0
     const stock = Number(quantity)
+    const variantCount = options.reduce((total, option) => total * option.values.length, options.length ? 1 : 1)
+    if (variantCount > 2048) { setError('A product can have up to 2,048 variants.'); return }
     if (!title.trim()) { setError('Enter a title.'); return }
     if (priceCents == null || !Number.isInteger(stock) || stock < 0) { setError('Enter a valid price and quantity.'); return }
     setBusy(true)
@@ -305,11 +315,14 @@ export default function AddProduct({ onOpen, gift = false }) {
 
           <section className="detail-card">
             <h2>Variants</h2>
+            <p className="muted">Each combination becomes its own variant, with this price and quantity. Up to 3 options and 2,048 variants.</p>
             {options.map(option => (
               <p key={option.name} className="pinned-field">{option.name}: {option.values.join(', ')}
+                {option.source === 'color' && <span className="muted">Color entries</span>}
                 <button type="button" className="icon-btn" aria-label={`Remove ${option.name}`} onClick={() => setOptions(current => current.filter(item => item.name !== option.name))}><X size={12} /></button>
               </p>
             ))}
+            {options.length > 0 && <p className="muted">{options.reduce((total, option) => total * option.values.length, 1)} variants will be created.</p>}
             {optionOpen && (optionName || customOption) ? (
               <div className="tag-form">
                 {customOption
@@ -324,15 +337,27 @@ export default function AddProduct({ onOpen, gift = false }) {
                   <Search size={14} />
                   <input aria-label="Search options" placeholder="Search" value={optionQuery} onChange={e => setOptionQuery(e.target.value)} />
                 </label>
+                {(meta?.entries || []).some(entry => entry.kind === 'Color') && !options.some(option => option.source === 'color') && (
+                  <>
+                    <p className="muted">Category metafields</p>
+                    <button type="button" onClick={() => {
+                      const entries = (meta?.entries || []).filter(entry => entry.kind === 'Color')
+                      setOptionName('Color')
+                      setCustomOption(false)
+                      setFromColors(true)
+                      setOptionValues(entries.map(entry => entry.name).join(', '))
+                    }}>Color</button>
+                  </>
+                )}
                 <p className="muted">Recommended</p>
                 {VARIANT_OPTIONS.filter(name => name.toLowerCase().includes(optionQuery.trim().toLowerCase()) && !options.some(option => option.name === name)).map(name => (
-                  <button type="button" key={name} onClick={() => { setOptionName(name); setCustomOption(false) }}>{name}</button>
+                  <button type="button" key={name} onClick={() => { setOptionName(name); setCustomOption(false); setFromColors(false) }}>{name}</button>
                 ))}
-                <button type="button" onClick={() => { setCustomOption(true); setOptionName('') }}><Plus size={14} /> Create custom option</button>
+                <button type="button" onClick={() => { setCustomOption(true); setOptionName(''); setFromColors(false) }}><Plus size={14} /> Create custom option</button>
               </div>
-            ) : (
-              <button type="button" className="text-link" onClick={() => { setOptionOpen(true); setOptionName(''); setCustomOption(false); setOptionQuery('') }}><Plus size={14} /> Add options like size or color</button>
-            )}
+            ) : options.length < 3 ? (
+              <button type="button" className="text-link" onClick={() => { setOptionOpen(true); setOptionName(''); setCustomOption(false); setFromColors(false); setOptionQuery('') }}><Plus size={14} /> {options.length ? 'Add another option' : 'Add options like size or color'}</button>
+            ) : <p className="muted">This product already has 3 options.</p>}
           </section>
 
           <section className="detail-card">

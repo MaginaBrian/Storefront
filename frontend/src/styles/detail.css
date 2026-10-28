@@ -180,6 +180,11 @@ tr.picked td { background: #eef0ff; }
 .settings-rail > button.on, .settings-rail > button:hover { background: #ececf3; }
 .settings-rail > button.on { font-weight: 600; }
 .settings-page h1 { font: 600 28px var(--sans); margin-bottom: 18px; }
+.permit-grid { display: grid; gap: 8px; margin: 12px 0; }
+.permit { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card, #fff); }
+.permit small, .permit-grid small { display: block; color: var(--muted); font-weight: 400; }
+.user-menu { display: grid; gap: 2px; margin-bottom: 8px; }
+.user-menu button { text-align: left; }
 .settings-block { margin-bottom: 22px; }
 .settings-block h2 { font-size: 14px; margin-bottom: 4px; }
 .settings-block .lead, .settings-note { color: var(--muted); }
@@ -269,6 +274,14 @@ tr.picked td { background: #eef0ff; }
 .menu-pop .danger { color: var(--red); }
 .type-mark { font-weight: 700; }
 .box-mark { width: 12px; height: 10px; border: 1.5px solid currentColor; border-radius: 2px; display: inline-block; }
+.option-block { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.option-values { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.option-value { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; }
+.option-value input { width: 92px; border: 0; background: transparent; font: inherit; color: inherit; }
+.swatch-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line); display: inline-block; }
+.variant-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.variant-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; }
+.variant-table td, .variant-table th { padding: 8px 6px; border-top: 1px solid var(--line); }
 .variant-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
 .variant-nav .finder { margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 .variant-product { display: flex; gap: 10px; align-items: flex-start; }

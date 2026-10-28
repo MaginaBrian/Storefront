@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from models.access import Role, Staff, acting, session
 from models.store import (
     Analytics,
     BlogPost,
@@ -23,12 +24,14 @@ from models.store import (
     Settings,
     Storefront,
 )
+from serializers.access import RoleSerializer
 from serializers.base import ValidationError
 from serializers.store import (
     BlogPostSerializer,
     CampaignSerializer,
     CompanySerializer,
     DefinitionSerializer,
+    EntrySerializer,
     DiscountSerializer,
     FileSerializer,
     MarketCatalogSerializer,
@@ -158,6 +161,22 @@ def metaobjects():
 def create_definition():
     try:
         return jsonify(Metaobject.create_definition(DefinitionSerializer.load(_body()))), 201
+    except ValidationError as exc:
+        return _invalid(exc)
+
+
+@bp.post("/api/metaobjects/entries")
+def create_entry():
+    try:
+        return jsonify(Metaobject.create_entry(EntrySerializer.load(_body()))), 201
+    except ValidationError as exc:
+        return _invalid(exc)
+
+
+@bp.post("/api/metaobjects/entries/<int:entry_id>")
+def update_entry(entry_id):
+    try:
+        return jsonify(Metaobject.update_entry(entry_id, EntrySerializer.load(_body())))
     except ValidationError as exc:
         return _invalid(exc)
 
@@ -318,6 +337,75 @@ def agentic():
     return jsonify(Storefront.agentic())
 
 
+@bp.get("/api/session")
+def current_session():
+    try:
+        return jsonify(session(request.headers.get("X-Staff-Id")))
+    except ValidationError as exc:
+        return _invalid(exc)
+
+
+@bp.get("/api/roles")
+def roles():
+    return jsonify(Role.listing())
+
+
+@bp.post("/api/roles")
+def create_role():
+    try:
+        return jsonify(Role.create(RoleSerializer.load(_body()))), 201
+    except ValidationError as exc:
+        return _invalid(exc)
+
+
+@bp.get("/api/roles/<int:role_id>")
+def role_detail(role_id):
+    found = Role.get(role_id)
+    if not found:
+        return jsonify(error="Role not found"), 404
+    return jsonify(found)
+
+
+@bp.post("/api/roles/<int:role_id>")
+def role_action(role_id):
+    body = _body()
+    action = body.get("action")
+    try:
+        if action == "update":
+            return jsonify(Role.update(role_id, RoleSerializer.load(body)))
+        if action == "duplicate":
+            return jsonify(Role.duplicate(role_id, str(body.get("name") or "")))
+        if action == "delete":
+            return jsonify(Role.delete(role_id))
+        raise ValidationError("Unknown action")
+    except ValidationError as exc:
+        return _invalid(exc)
+
+
+@bp.get("/api/staff")
+def staff():
+    return jsonify(Staff.listing())
+
+
+@bp.post("/api/staff/<int:staff_id>")
+def staff_action(staff_id):
+    body = _body()
+    action = body.get("action")
+    try:
+        if action == "assign":
+            return jsonify(Staff.assign(staff_id, int(body.get("role") or 0)))
+        if action == "remove":
+            return jsonify(Staff.remove(staff_id, int(body.get("role") or 0)))
+        if action == "stores":
+            names = body.get("stores") if isinstance(body.get("stores"), list) else []
+            return jsonify(Staff.stores(staff_id, [str(name) for name in names]))
+        raise ValidationError("Unknown action")
+    except (TypeError, ValueError):
+        return jsonify(error="Choose a role"), 400
+    except ValidationError as exc:
+        return _invalid(exc)
+
+
 @bp.get("/api/settings")
 def settings():
     return jsonify(Settings.listing())
@@ -372,4 +460,10 @@ def analytics():
 
 @bp.get("/api/search")
 def search():
-    return jsonify(Search.hits(request.args.get("q")))
+    from access import view_allowed
+
+    staff = acting(request.headers.get("X-Staff-Id"))
+    hits = Search.hits(request.args.get("q"))
+    if staff and not staff["owner"]:
+        hits = [hit for hit in hits if view_allowed(hit.get("view"), staff["permissions"])]
+    return jsonify(hits)

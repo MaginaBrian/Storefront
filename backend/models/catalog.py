@@ -3,6 +3,27 @@ from datetime import datetime
 
 from db import connect, query
 from models.base import Model
+from models.variants import (
+    add_one_variant,
+    add_option,
+    add_value,
+    apply_initial_options,
+    connect_option,
+    copy_one_variant,
+    copy_product_inventory,
+    create_for_product,
+    delete_product_inventory,
+    disconnect_option,
+    duplicate_many,
+    normalize_options,
+    read_options,
+    remove_option,
+    remove_value,
+    rename_product_inventory,
+    rename_value,
+    save_variant_fields,
+    sync_stock,
+)
 from serializers.base import ValidationError
 from serializers.catalog import po_text, product_handle
 
@@ -17,8 +38,10 @@ class Product(Model):
         grouped = {}
         for tag in query("SELECT product_id, tag FROM product_tags ORDER BY tag"):
             grouped.setdefault(tag["product_id"], []).append(tag["tag"])
+        counts = {row["product"]: row["n"] for row in query("SELECT product, COUNT(*) AS n FROM inventory GROUP BY product")}
         for row in rows:
             row["tags"] = grouped.get(row["id"], [])
+            row["variants"] = counts.get(row["title"], 0)
         return rows
 
     @classmethod
@@ -40,6 +63,9 @@ class Product(Model):
             "tags": tags,
             "fields": fields,
             "collections": collections,
+            "options": read_options(product),
+            "variants": query("SELECT * FROM inventory WHERE product = ? ORDER BY id", (product["title"],)),
+            "colors": query("SELECT id, name, swatch FROM meta_entries WHERE kind = 'Color' ORDER BY name"),
             "store": {
                 "name": name[0]["value"] if name else "Maison",
                 "domain": store[0]["domain"] if store else "maison.co.ke",
@@ -48,6 +74,7 @@ class Product(Model):
 
     @classmethod
     def create(cls, fields):
+        options = normalize_options((fields.get("extra") or {}).get("options"))
         with connect() as db:
             cur = db.execute(
                 "INSERT INTO products (title, price, stock, sold, description, status, category, product_type, vendor, color, media, extra) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -56,12 +83,8 @@ class Product(Model):
             product_id = cur.lastrowid
             handle = product_handle(fields["title"], product_id)
             db.execute("UPDATE products SET handle = ? WHERE id = ?", (handle, product_id))
-            db.execute(
-                """INSERT INTO inventory
-                   (product, variant, sku, unavailable, committed, available, on_hand, incoming, price, weight, location, tracked, physical, continue_selling)
-                   VALUES (?, ?, ?, 0, 0, ?, ?, 0, ?, ?, 'Nairobi', ?, ?, ?)""",
-                (fields["title"], fields["variant"], fields["sku"], fields["stock"], fields["stock"], fields["price"], fields["weight"], fields["tracked"], fields["physical"], fields["continue_selling"]),
-            )
+            product = dict(db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone())
+            create_for_product(db, product, fields, options)
             for tag in fields["tags"]:
                 db.execute("INSERT OR IGNORE INTO product_tags (product_id, tag) VALUES (?, ?)", (product_id, tag))
             for name in fields["fields"]:
@@ -77,6 +100,7 @@ class Product(Model):
     @classmethod
     def act(cls, product_id, body):
         action = body.get("action")
+        notice = None
         with connect() as db:
             product = dict(db.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone())
             if action == "update":
@@ -93,6 +117,7 @@ class Product(Model):
                 handle = str(body.get("handle") if body.get("handle") is not None else product["handle"]).strip() or product_handle(title, product_id)
                 if title != product["title"]:
                     db.execute("UPDATE collection_products SET product = ? WHERE product = ?", (title, product["title"]))
+                    rename_product_inventory(db, product["title"], title)
                 db.execute(
                     "UPDATE products SET title = ?, description = ?, status = ?, category = ?, product_type = ?, vendor = ?, color = ?, media = ?, handle = ? WHERE id = ?",
                     (title, description, status, category, product_type, vendor, color, media, handle, product_id),
@@ -131,8 +156,8 @@ class Product(Model):
                 copy_title = f"{product['title']} copy"
                 handle = product_handle(copy_title, product_id + 1000)
                 cur = db.execute(
-                    "INSERT INTO products (title, price, stock, sold, description, status, category, product_type, vendor, color, handle, media) VALUES (?, ?, ?, 0, ?, 'draft', ?, ?, ?, ?, ?, ?)",
-                    (copy_title, product["price"], product["stock"], product["description"], product["category"], product["product_type"], product["vendor"], product["color"], handle, product["media"]),
+                    "INSERT INTO products (title, price, stock, sold, description, status, category, product_type, vendor, color, handle, media, extra) VALUES (?, ?, ?, 0, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)",
+                    (copy_title, product["price"], product["stock"], product["description"], product["category"], product["product_type"], product["vendor"], product["color"], handle, product["media"], product["extra"] or "{}"),
                 )
                 product_id = cur.lastrowid
                 db.execute(
@@ -143,15 +168,45 @@ class Product(Model):
                     "INSERT INTO product_fields (product_id, name) SELECT ?, name FROM product_fields WHERE product_id = ?",
                     (product_id, product["id"]),
                 )
+                copy_product_inventory(db, product["title"], copy_title)
+                sync_stock(db, copy_title)
             elif action == "delete":
                 db.execute("DELETE FROM product_tags WHERE product_id = ?", (product_id,))
                 db.execute("DELETE FROM product_fields WHERE product_id = ?", (product_id,))
                 db.execute("DELETE FROM collection_products WHERE product = ?", (product["title"],))
+                delete_product_inventory(db, product["title"])
                 db.execute("DELETE FROM products WHERE id = ?", (product_id,))
                 return {"deleted": True}
+            elif action == "options":
+                op = body.get("op")
+                if op == "set":
+                    apply_initial_options(db, product, body.get("options"))
+                elif op == "add_option":
+                    add_option(db, product, body.get("option") or {})
+                elif op == "add_value":
+                    add_value(db, product, body.get("name"), body.get("value"))
+                elif op == "remove_value":
+                    remove_value(db, product, body.get("name"), body.get("value"))
+                elif op == "rename_value":
+                    rename_value(db, product, body.get("name"), body.get("source"), body.get("value"))
+                elif op == "remove_option":
+                    remove_option(db, product, body.get("name"))
+                elif op == "add_variant":
+                    add_one_variant(db, product, body.get("values"), body.get("price"), body.get("on_hand") or 0)
+                elif op == "duplicate":
+                    notice = duplicate_many(db, product, body.get("ids"), body.get("name"), body.get("value"))
+                elif op == "connect":
+                    connect_option(db, product, body.get("name"))
+                elif op == "disconnect":
+                    disconnect_option(db, product, body.get("name"))
+                else:
+                    raise ValidationError("Unknown option action")
             else:
                 raise ValidationError("Unknown action")
-        return cls.load(product_id)
+        payload = cls.load(product_id)
+        if notice:
+            payload["skipped"] = notice.get("skipped") or []
+        return payload
 
 
 class Collection(Model):
@@ -206,10 +261,16 @@ class Inventory(Model):
     @classmethod
     def create(cls, fields):
         with connect() as db:
+            product = db.execute("SELECT * FROM products WHERE title = ?", (fields["product"],)).fetchone()
+            if product and read_options(dict(product)):
+                raise ValidationError("Add this variant from the product page so each combination stays unique.")
+            price = product["price"] if product else 0
             cur = db.execute(
-                "INSERT INTO inventory (product, variant, sku, unavailable, committed, available, on_hand, incoming) VALUES (?, ?, NULL, 0, 0, ?, ?, 0)",
-                (fields["product"], fields["variant"], fields["on_hand"], fields["on_hand"]),
+                "INSERT INTO inventory (product, variant, sku, unavailable, committed, available, on_hand, incoming, price, option1) VALUES (?, ?, NULL, 0, 0, ?, ?, 0, ?, ?)",
+                (fields["product"], fields["variant"], fields["on_hand"], fields["on_hand"], price, fields["variant"] if fields["variant"] != "Default" else ""),
             )
+            if product:
+                sync_stock(db, fields["product"])
             return dict(db.execute("SELECT * FROM inventory WHERE id = ?", (cur.lastrowid,)).fetchone())
 
     @classmethod
@@ -247,32 +308,12 @@ class Inventory(Model):
         with connect() as db:
             item = dict(db.execute("SELECT * FROM inventory WHERE id = ?", (item_id,)).fetchone())
             if action == "update":
-                variant = str(body.get("variant") if body.get("variant") is not None else item["variant"]).strip() or item["variant"]
-                try:
-                    price = int(body.get("price") if body.get("price") is not None else item["price"])
-                    on_hand = int(body.get("on_hand") if body.get("on_hand") is not None else item["on_hand"])
-                    unavailable = int(body.get("unavailable") if body.get("unavailable") is not None else item["unavailable"])
-                    committed = int(body.get("committed") if body.get("committed") is not None else item["committed"])
-                    weight = int(body.get("weight") if body.get("weight") is not None else item["weight"])
-                except (TypeError, ValueError):
-                    raise ValidationError("Quantities must be numbers") from None
-                available = max(on_hand - unavailable - committed, 0)
-                location = str(body.get("location") if body.get("location") is not None else item["location"]).strip() or "Nairobi"
-                tracked = 1 if body.get("tracked", item["tracked"]) else 0
-                physical = 1 if body.get("physical", item["physical"]) else 0
-                continue_selling = 1 if body.get("continue_selling", item["continue_selling"]) else 0
-                db.execute(
-                    "UPDATE inventory SET variant = ?, price = ?, on_hand = ?, unavailable = ?, committed = ?, available = ?, weight = ?, location = ?, tracked = ?, physical = ?, continue_selling = ? WHERE id = ?",
-                    (variant, price, on_hand, unavailable, committed, available, weight, location, tracked, physical, continue_selling, item_id),
-                )
+                save_variant_fields(db, item, body)
             elif action == "duplicate":
-                cur = db.execute(
-                    "INSERT INTO inventory (product, variant, sku, unavailable, committed, available, on_hand, incoming, price, weight, location, tracked, physical, continue_selling) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (item["product"], f"{item['variant']} copy", item["sku"], item["unavailable"], item["committed"], item["available"], item["on_hand"], item["incoming"], item["price"], item["weight"], item["location"], item["tracked"], item["physical"], item["continue_selling"]),
-                )
-                item_id = cur.lastrowid
+                item_id = copy_one_variant(db, item, body)
             elif action == "delete":
                 db.execute("DELETE FROM inventory WHERE id = ?", (item_id,))
+                sync_stock(db, item["product"])
                 return {"deleted": True}
             else:
                 raise ValidationError("Unknown action")

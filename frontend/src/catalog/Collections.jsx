@@ -61,7 +61,7 @@ function factsFor(product, inventory) {
     tags: product.tags || [],
     title: product.title || '',
     type: product.product_type || '',
-    variants: [...new Set([product.color, ...variants.map(row => row.variant)].filter(Boolean))],
+    variants: [...new Set([product.color, ...variants.flatMap(row => [row.variant, row.option1, row.option2, row.option3])].filter(Boolean))],
     vendor: product.vendor || '',
   }
 }

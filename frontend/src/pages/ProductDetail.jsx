@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Bold, ChevronDown, Copy, Eye, Image, Italic, Link2, List, Mail, Plus, Share2, Smile, Trash2, Underline, X,
 } from 'lucide-react'
+import ProductVariants from '../catalog/ProductVariants.jsx'
 import { money } from '../lib/money.js'
 
 const VEST_FIELDS = ['Size', 'Battery size', 'Fabric', 'Activewear clothing features', 'Activity', 'Age group', 'Battery type', 'Insulation fill material', 'Neckline', 'Packability', 'Size type', 'Target gender']
@@ -171,6 +172,13 @@ export default function ProductDetail({ productId, onOpen }) {
               )}
             </div>
           </section>
+          <ProductVariants
+            options={data.options || []}
+            variants={data.variants || []}
+            colors={data.colors || []}
+            act={act}
+            onOpen={onOpen}
+          />
           <section className="detail-card">
             <div className="card-title">
               <h2>Category</h2>
