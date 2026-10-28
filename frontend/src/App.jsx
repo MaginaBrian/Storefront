@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BarChart3, Globe, Inbox, Moon, Search, Sun, Tag, Users } from 'lucide-react'
 import CatalogSection from './catalog/index.jsx'
 import Home from './home/Home.jsx'
+import { search as searchRecords } from './api/resources.js'
 import { useApi } from './lib/api.js'
 import { ANALYTICS_VIEWS, CHANNELS, CUSTOMER_VIEWS, MARKET_VIEWS, NAV, PRODUCT_VIEWS, SETTINGS, readRoute } from './nav.js'
 import OrdersSection from './orders/index.jsx'
@@ -53,7 +54,7 @@ export default function App() {
   useEffect(() => {
     if (search.trim().length < 2) { setHits([]); return }
     const handle = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(search.trim())}`).then(r => r.json()).then(setHits).catch(() => setHits([]))
+      searchRecords(search.trim()).then(setHits).catch(() => setHits([]))
     }, 150)
     return () => clearTimeout(handle)
   }, [search])

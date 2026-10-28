@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bold, Check, ChevronDown, ChevronLeft, ChevronRight, Image, Italic, Link2, List, Plus, Search, Smile, Underline, X } from 'lucide-react'
+import { products as productApi } from '../api/resources.js'
 import { useJson } from '../lib/api.js'
 import { money } from '../lib/money.js'
+import { productPayload } from '../serializers/order.js'
 
 const MAJORS = ['Animals & Pet Supplies', 'Apparel & Accessories', 'Arts & Entertainment', 'Baby & Toddler', 'Business & Industrial', 'Cameras & Optics', 'Electronics', 'Food, Beverages & Tobacco', 'Furniture', 'Hardware', 'Religious & Ceremonial', 'Software', 'Sporting Goods', 'Toys & Games', 'Vehicles & Parts', 'Gift Cards', 'Uncategorized', 'Services', 'Product Add-Ons', 'Bundles']
 const CLOTHING = ['Activewear', 'Dresses', 'One-Pieces', 'Outerwear', 'Outfit Sets', 'Pants', 'Shorts', 'Skirts', 'Skorts', 'Sleepwear & Loungewear', 'Suits', 'Swimwear', 'Traditional & Ceremonial Clothing', 'Wedding & Bridal Party Dresses', 'Lingerie', "Men's Undergarments", 'Socks', 'Maternity Clothing', 'Clothing Tops', 'Uniforms & Workwear', "Baby & Children's Clothing"]
@@ -105,42 +107,24 @@ export default function AddProduct({ onOpen, gift = false }) {
     if (!title.trim()) { setError('Enter a title.'); return }
     if (priceCents == null || !Number.isInteger(stock) || stock < 0) { setError('Enter a valid price and quantity.'); return }
     setBusy(true)
-    fetch('/api/products', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: title.trim(),
-        description,
-        status,
-        category,
-        product_type: productType,
-        vendor,
-        media,
-        price: priceCents,
-        stock,
-        tags,
-        fields,
-        collections: chosen,
-        extra: {
-          compare_at: compareAt.trim() ? cents(compareAt) : 0,
-          unit_price: unitPrice.trim(),
-          charge_tax: chargeTax,
-          cost: cost.trim() ? cents(cost) : 0,
-          sku,
-          barcode,
-          tracked,
-          continue_selling: continueSelling,
-          channels,
-          theme,
-          options,
-          variant: options[0]?.values?.[0] || 'Default',
-        },
-      }),
-    }).then(async response => {
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || 'Could not save')
-      onOpen('products', { product: body.title })
-    }).catch(err => setError(err.message)).finally(() => setBusy(false))
+    productApi.create(productPayload({
+      title, description, status, category, productType, vendor, media,
+      price: priceCents, stock, tags, fields, collections: chosen,
+      extra: {
+        compare_at: compareAt.trim() ? cents(compareAt) : 0,
+        unit_price: unitPrice.trim(),
+        charge_tax: chargeTax,
+        cost: cost.trim() ? cents(cost) : 0,
+        sku,
+        barcode,
+        tracked,
+        continue_selling: continueSelling,
+        channels,
+        theme,
+        options,
+        variant: options[0]?.values?.[0] || 'Default',
+      },
+    })).then(body => onOpen('products', { product: body.title })).catch(err => setError(err.message)).finally(() => setBusy(false))
   }
 
   const listing = title.trim() || description.trim()

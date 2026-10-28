@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpDown, ChevronDown, ChevronLeft, Globe, Image, Plus, Search, X } from 'lucide-react'
+import { collections as collectionApi } from '../api/resources.js'
 import { useJson } from '../lib/api.js'
+import { collectionPayload } from '../serializers/order.js'
 import { money } from '../lib/money.js'
 import { Modal } from '../components/Modal.jsx'
 import { Toolbar } from './ui.jsx'
@@ -220,27 +222,10 @@ function CreateCollection({ onOpen, exampleId }) {
     event.preventDefault()
     if (!title.trim()) { setError('Enter a title.'); return }
     setBusy(true)
-    fetch('/api/collections', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: title.trim(),
-        description,
-        image,
-        conditions: describe(conditions),
-        excludes: describe(excludes, 'Exclude '),
-        products: included.map(product => product.title),
-        channels,
-        theme,
-        seo_title: seoTitle.trim() || title.trim(),
-        seo_description: seoDescription.trim() || description.trim(),
-        sort,
-      }),
-    }).then(async response => {
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || 'Could not save')
-      onOpen('collections', { collection: body.id })
-    }).catch(err => { setError(err.message); setBusy(false) })
+    collectionApi.create(collectionPayload({
+      title, description, image, conditions: describe(conditions), excludes: describe(excludes, 'Exclude '),
+      products: included.map(product => product.title), channels, theme, seoTitle, seoDescription: seoDescription, sort,
+    })).then(body => onOpen('collections', { collection: body.id })).catch(err => { setError(err.message); setBusy(false) })
   }
 
   const channelLabel = channels.length === 1 ? '1 channel' : `${channels.length} channels`

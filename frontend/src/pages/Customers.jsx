@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, Pencil, Plus, Search } from 'lucide-react'
+import { customers as customerApi } from '../api/resources.js'
 import { Modal } from '../components/Modal.jsx'
+import { customerPayload } from '../serializers/order.js'
 import { Tag } from '../components/Tag.jsx'
 import { useApi, useJson } from '../lib/api.js'
 import { csv } from '../lib/csv.js'
@@ -112,12 +114,7 @@ function ImportCustomers({ onClose, onImported }) {
   ], 'customers-sample.csv')
   const save = () => {
     setBusy(true)
-    fetch('/api/customers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customers: rows }),
-    }).then(async response => {
-      if (!response.ok) throw new Error((await response.json()).error || 'Could not import customers')
+    customerApi.create({ customers: rows }).then(() => {
       onImported()
       onClose()
     }).catch(err => { setError(err.message); setBusy(false) })
@@ -165,27 +162,9 @@ function NewCustomer({ onOpen, onSaved }) {
     event.preventDefault()
     if (!first.trim() && !last.trim()) { setError('Enter a first or last name.'); return }
     setBusy(true)
-    fetch('/api/customers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        first_name: first.trim(),
-        last_name: last.trim(),
-        email,
-        phone,
-        language,
-        email_marketing: emailMarketing,
-        sms,
-        whatsapp,
-        note,
-        tags,
-        location: city,
-        address,
-        tax_settings: tax,
-      }),
-    }).then(async response => {
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || 'Could not add this customer')
+    customerApi.create(customerPayload({
+      first, last, email, phone, language, emailMarketing, sms, whatsapp, note, tags, address, city, tax,
+    })).then(body => {
       onSaved()
       onOpen('customers', { customer: body.name })
     }).catch(err => { setError(err.message); setBusy(false) })

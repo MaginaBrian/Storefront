@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Image } from 'lucide-react'
+import { inventory as inventoryApi } from '../api/resources.js'
 import { Modal } from '../components/Modal.jsx'
+import { inventoryPayload } from '../serializers/order.js'
 import { useJson } from '../lib/api.js'
 import { csv } from '../lib/csv.js'
 import VariantEditor from './VariantEditor.jsx'
@@ -17,11 +19,7 @@ function ImportInventory({ onClose, onImported }) {
   const upload = () => {
     if (!file) return
     setBusy(true)
-    const body = new FormData()
-    body.append('file', file)
-    fetch('/api/inventory/import', { method: 'POST', body }).then(async response => {
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'Could not import inventory')
+    inventoryApi.importFile(file).then(payload => {
       onImported()
       if (payload.skipped?.length) {
         setError(`Updated ${payload.updated}. Skipped ${payload.skipped.join(', ')}.`)
@@ -85,13 +83,7 @@ export function Inventory({ focus = {}, onOpen }) {
     e.preventDefault()
     const qty = Number(onHand)
     if (!product.trim() || !Number.isFinite(qty) || qty < 0) { setFormError('Enter a product and an on-hand quantity.'); return }
-    fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product: product.trim(), variant: variant.trim(), on_hand: qty }),
-    }).then(async r => {
-      if (!r.ok) throw new Error((await r.json()).error || 'Could not save')
-      const created = await r.json()
+    inventoryApi.create(inventoryPayload({ product, variant, onHand })).then(created => {
       setOpen(false); setProduct(''); setVariant(''); setOnHand(''); setFormError('')
       reload()
       onOpen('inventory', { item: created.id })

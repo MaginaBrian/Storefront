@@ -1,8 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Building2, Calendar, ChevronLeft, Hash, Image, Link2, MapPin, Search, StickyNote, Tag, X } from 'lucide-react'
+import { giftCards, purchaseOrders, transfers } from '../api/resources.js'
 import { Modal } from '../components/Modal.jsx'
+import { purchaseLine, transferLine } from '../models/order.js'
 import { money } from '../lib/money.js'
 import { useJson } from '../lib/api.js'
+import { giftCardPayload, lineTotal, purchaseOrderPayload, transferPayload } from '../serializers/order.js'
+
+export { purchaseLine as lineFrom }
+export { lineTotal }
 
 export const PLACES = ['Nairobi', 'Kisumu', 'Mombasa']
 export const SUPPLIERS = ['Korom Textiles', 'Mwotaji Ltd', 'Hawkeye Media']
@@ -11,15 +17,6 @@ const DISCOUNTS = [0, 5, 10, 15, 20, 25]
 function code() {
   const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789'
   return Array.from({ length: 17 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('')
-}
-
-export function lineFrom(item) {
-  return { inventory_id: item.id, title: `${item.product} · ${item.variant}`, qty: 1, price: 0, sku: item.sku || '', supplier_sku: '', discount: 0 }
-}
-
-export function lineTotal(line) {
-  const gross = Number(line.price || 0) * Number(line.qty || 0)
-  return Math.round(gross * (100 - Number(line.discount || 0)) / 100)
 }
 
 function centsFromInput(value) {
@@ -329,19 +326,14 @@ export function CreatePurchaseOrder({ onOpen, onSaved }) {
   const add = items => setLines(prev => {
     const incoming = Array.isArray(items) ? items : [items]
     const ids = new Set(prev.map(line => line.inventory_id))
-    return [...prev, ...incoming.filter(item => !ids.has(item.id)).map(lineFrom)]
+    return [...prev, ...incoming.filter(item => !ids.has(item.id)).map(purchaseLine)]
   })
   const leave = () => onOpen('purchase-orders')
   const save = e => {
     e.preventDefault()
     if (!supplier) { setError('Select a supplier.'); return }
     setBusy(true)
-    fetch('/api/purchase-orders', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ supplier, destination, reference, note, terms, currency: 'KES', tags: '', lines }),
-    }).then(async r => {
-      if (!r.ok) throw new Error((await r.json()).error || 'Could not save')
-      const created = await r.json()
+    purchaseOrders.create(purchaseOrderPayload({ supplier, destination, reference, note, terms, lines })).then(created => {
       onSaved()
       onOpen('purchase-orders', { po: created.id, notice: 'created' })
     }).catch(err => { setError(err.message); setBusy(false) })
@@ -423,17 +415,12 @@ export function CreateTransfer({ onOpen, onSaved, purchaseOrderId = '' }) {
   const [openField, setOpenField] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const add = item => setLines(prev => prev.some(line => line.inventory_id === item.id) ? prev : [...prev, { inventory_id: item.id, title: `${item.product} · ${item.variant}`, qty: 1, price: item.price || 0 }])
+  const add = item => setLines(prev => prev.some(line => line.inventory_id === item.id) ? prev : [...prev, transferLine(item)])
   const save = e => {
     e.preventDefault()
     if (!origin || !destination) { setError('Select an origin and a destination.'); return }
     setBusy(true)
-    fetch('/api/transfers', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ origin, destination, reference, note, tags, purchase_order: purchaseOrder, lines }),
-    }).then(async r => {
-      if (!r.ok) throw new Error((await r.json()).error || 'Could not save')
-      const created = await r.json()
+    transfers.create(transferPayload({ origin, destination, reference, note, tags, purchaseOrder, lines })).then(created => {
       onSaved()
       onOpen('transfers', { transfer: created.id })
     }).catch(err => { setError(err.message); setBusy(false) })
@@ -505,11 +492,7 @@ export function CreateGiftCard({ onOpen, onSaved }) {
     const cents = Math.round(Number(amount) * 100)
     if (!Number.isFinite(cents) || cents < 0) { setError('Enter an initial value.'); return }
     setBusy(true)
-    fetch('/api/gift-cards', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: cardCode, customer, balance: cents, note, expires }),
-    }).then(async r => {
-      if (!r.ok) throw new Error((await r.json()).error || 'Could not save')
+    giftCards.create(giftCardPayload({ code: cardCode, amount, customer, note, expires })).then(() => {
       onSaved()
       onOpen('gift-cards')
     }).catch(err => { setError(err.message); setBusy(false) })

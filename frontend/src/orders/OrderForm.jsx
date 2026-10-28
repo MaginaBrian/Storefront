@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { drafts, orders } from '../api/resources.js'
 import { Modal } from '../components/Modal.jsx'
+import { orderPayload, simpleDraftPayload } from '../serializers/order.js'
 
 export default function OrderForm({ mode, onClose, onSaved, initialCustomer = '' }) {
   const [customer, setCustomer] = useState(initialCustomer)
@@ -17,18 +19,11 @@ export default function OrderForm({ mode, onClose, onSaved, initialCustomer = ''
     const cents = Math.round(Number(total) * 100)
     if (!Number.isFinite(cents) || cents < 0) { setError('Enter a valid total.'); return }
     const body = mode === 'draft'
-      ? { customer: customer.trim(), total: cents, po: po.trim() }
-      : { customer: customer.trim(), total: cents, items: Number(items) || 1, channel, payment }
+      ? simpleDraftPayload({ customer, total, po })
+      : orderPayload({ customer, total, items, channel, payment })
     setBusy(true)
-    fetch(mode === 'draft' ? '/api/drafts' : '/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }).then(async r => {
-      if (!r.ok) throw new Error((await r.json()).error || 'Could not save')
-      onSaved(await r.json())
-      onClose()
-    }).catch(err => { setError(err.message); setBusy(false) })
+    const save = mode === 'draft' ? drafts.create(body) : orders.create(body)
+    save.then(saved => { onSaved(saved); onClose() }).catch(err => { setError(err.message); setBusy(false) })
   }
 
   return (

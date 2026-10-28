@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, Info, MoreHorizontal, Pencil, Plus, Search, Store, X } from 'lucide-react'
+import { drafts } from '../api/resources.js'
 import { useJson } from '../lib/api.js'
 import { money } from '../lib/money.js'
+import { draftMoneyPayload } from '../serializers/order.js'
 
 const CURRENCIES = [
   ['KES', 'Kenyan Shilling (KES)', 'Kenya'],
@@ -136,42 +138,16 @@ export default function CreateDraft({ onOpen, initialCustomer = '' }) {
     if (!customer.trim()) { setError('Choose a customer before saving this draft.'); return }
     setBusy(true)
     setError('')
-    fetch('/api/drafts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customer: customer.trim(),
-        lines: lines.map(line => ({ title: line.title, price: line.price, qty: line.qty, size: line.size, color: line.color || line.variant || '' })),
-        discount: discountCents,
-        shipping,
-        note: note.trim(),
-        tags: tags.trim(),
-        currency,
-        phone: phone.trim(),
-        email: email.trim(),
-        address: address.trim(),
-      }),
-    }).then(async r => {
-      const body = await r.json()
-      if (!r.ok) throw new Error(body.error || 'Could not save this draft')
+    drafts.create(draftMoneyPayload({
+      customer, lines, discount: discountCents, shipping, note, tags, currency, phone, email, address,
+    })).then(async body => {
       if (intent === 'invoice') {
-        const sent = await fetch(`/api/drafts/${body.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'invoice' }),
-        })
-        if (!sent.ok) throw new Error('The draft was saved, but the invoice was not sent.')
+        await drafts.act(body.id, { action: 'invoice' }).catch(() => { throw new Error('The draft was saved, but the invoice was not sent.') })
         onOpen('drafts', { draft: body.id, invoice: '1' })
         return
       }
       if (intent === 'paid') {
-        const paid = await fetch(`/api/drafts/${body.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'order', payment: 'paid' }),
-        })
-        const paidBody = await paid.json()
-        if (!paid.ok) throw new Error(paidBody.error || 'Could not mark this draft as paid')
+        const paidBody = await drafts.act(body.id, { action: 'order', payment: 'paid' })
         onOpen('orders', { order: paidBody.order_id })
         return
       }
