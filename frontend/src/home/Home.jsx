@@ -1,11 +1,24 @@
-import { useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useApi } from '../lib/api.js'
 
-const TONES = { green: ['#e3f6ea', '#1f9d55'], amber: ['#fff1d6', '#e59a0d'], violet: ['#e8e9fb', '#5b6bd1'], red: ['#fde4e4', '#e5262b'] }
-const SHADES = ['#3b4488', '#5b6bd1', '#8b94e8', '#c3c8f5', '#e4e6ef']
+const LIGHT_SHADES = ['#14261F', '#3E6B58', '#8FA99B', '#B08D4A', '#D9CFB8']
+const DARK_SHADES = ['#C0A062', '#3E6B58', '#6F9482', '#A9BDB1', '#E5DCC5']
+const LIGHT_TONES = { green: ['#E4EEE7', '#2F6B4F'], amber: ['#F3E8CC', '#8A6414'], violet: ['#EFE6D2', '#B08D4A'], red: ['#F2DEDC', '#8E2F2F'] }
+const DARK_TONES = { green: ['#1F3A2E', '#6FBF8F'], amber: ['#3A3018', '#C0A062'], violet: ['#2A332C', '#A9BDB1'], red: ['#3A2422', '#D27A6E'] }
 
-function Donut({ data }) {
+function usePalette() {
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark')
+  useEffect(() => {
+    const sync = () => setDark(document.documentElement.dataset.theme === 'dark')
+    const obs = new MutationObserver(sync)
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => obs.disconnect()
+  }, [])
+  return dark ? [DARK_SHADES, DARK_TONES] : [LIGHT_SHADES, LIGHT_TONES]
+}
+
+function Donut({ data, shades }) {
   const total = data.reduce((a, d) => a + d.sales, 0), r = 70, C = 2 * Math.PI * r
   let off = 0
   return (
@@ -13,7 +26,7 @@ function Donut({ data }) {
       <g transform="rotate(-90 100 100)" fill="none" strokeWidth="26">
         {data.map((d, i) => {
           const len = (d.sales / total) * C
-          const el = <circle key={d.name} cx="100" cy="100" r={r} stroke={SHADES[i]} strokeDasharray={`${len - 2} ${C}`} strokeDashoffset={-off} />
+          const el = <circle key={d.name} cx="100" cy="100" r={r} stroke={shades[i % shades.length]} strokeDasharray={`${len - 2} ${C}`} strokeDashoffset={-off} />
           off += len
           return el
         })}
@@ -38,6 +51,12 @@ function figure(value, t) {
     ? current.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
     : (decimals ? current.toFixed(decimals) : String(Math.round(current)))
   return `${match[1]}${shown}${match[3]}`
+}
+
+function inkOn(hex) {
+  const n = parseInt(hex.slice(1), 16)
+  const lum = ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114
+  return lum > 150 ? '#14261F' : '#F4F1EA'
 }
 
 function ease(p, start) {
@@ -66,6 +85,7 @@ export default function Home({ onOpen }) {
     raf = requestAnimationFrame(tick)
     return () => { cancelAnimationFrame(raf); cancelAnimationFrame(grow) }
   }, [d])
+  const [shades, tones] = usePalette()
   const kpis = d?.kpis || [0, 1, 2, 3].map(i => ({ label: '', value: '0', note: '', good: true, tone: ['green', 'amber', 'violet', 'red'][i] }))
   const week = d?.week || Array.from({ length: 7 }, () => ['', 0])
   const openKpi = label => onOpen(label === 'Orders' ? 'orders' : label === 'New customers' ? 'customers' : label === 'Low stock' ? 'products' : 'analytics', label === 'Low stock' ? { stock: 'low' } : undefined)
@@ -80,7 +100,7 @@ export default function Home({ onOpen }) {
           const step = ease(p, i * 0.08)
           return (
             <button type="button" className="card kpi rise" key={k.label || i} style={{ animationDelay: `${i * 70}ms` }} onClick={d ? () => openKpi(k.label) : undefined}>
-              <div className="kpi-top"><span>{k.label}</span><i style={{ background: TONES[k.tone][0], color: TONES[k.tone][1] }} /></div>
+              <div className="kpi-top"><span>{k.label}</span><i style={{ background: tones[k.tone][0], color: tones[k.tone][1] }} /></div>
               <div className="kpi-val"><strong>{figure(k.value, step)}</strong>{k.note && <em className={k.good ? 'up' : 'down'} style={{ opacity: step }}>{k.note}</em>}</div>
             </button>
           )
@@ -90,14 +110,14 @@ export default function Home({ onOpen }) {
         <div className="card rise" style={{ animationDelay: '160ms' }}>
           <h3>Sales by channel</h3>
           <div className="channels">
-            {d && <Donut data={d.channels} />}
+            {d && <Donut data={d.channels} shades={shades} />}
             <ul>
               {(d?.channels || []).map((c, i) => {
                 const step = ease(p, 0.12 + i * 0.04)
                 return (
                   <li key={c.name}>
                     <button type="button" className="channel-hit" onClick={() => onOpen('orders', { channel: c.name })}>
-                    <b style={{ background: SHADES[i] }} />
+                    <b style={{ background: shades[i % shades.length] }} />
                     <div><span>{c.name}</span><strong>{figure(`KES ${c.sales.toLocaleString('en-US')}`, step)}</strong></div>
                     <div className="r"><span>{figure(c.orders, step)} orders</span><em className={c.delta > 0 ? 'up' : 'down'}>{Math.abs(c.delta)}%</em></div>
                     </button>
@@ -136,7 +156,7 @@ export default function Home({ onOpen }) {
           <h3>Top products</h3>
           <ul className="top">
             {(d?.top || []).map((t, i) => (
-              <li key={t.title} className="rise-row" style={{ animationDelay: `${420 + i * 80}ms` }}><button type="button" className="top-hit" onClick={() => onOpen('products', { product: t.title })}><b style={{ background: SHADES[i % 4] }}>{t.title[0]}</b>
+              <li key={t.title} className="rise-row" style={{ animationDelay: `${420 + i * 80}ms` }}><button type="button" className="top-hit" onClick={() => onOpen('products', { product: t.title })}><b style={{ background: shades[i % 4], color: inkOn(shades[i % 4]) }}>{t.title[0]}</b>
                 <div><strong>{t.title}</strong><small>{figure(t.sold, ease(p, 0.18 + i * 0.06))} units sold</small></div><span>{figure(t.sales, ease(p, 0.18 + i * 0.06))}</span></button></li>
             ))}
           </ul>

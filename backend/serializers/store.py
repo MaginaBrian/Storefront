@@ -321,9 +321,47 @@ class ReportSerializer(NamedSerializer):
         return {"name": name, "category": self.text("category") or "Sales"}
 
 
+def _sales_amount(value):
+    text = str(value or "").upper().replace("KES", "").replace(",", "").strip()
+    factor = 1
+    if text.endswith("K"):
+        factor = 1000
+        text = text[:-1].strip()
+    elif text.endswith("M"):
+        factor = 1_000_000
+        text = text[:-1].strip()
+    try:
+        return int(round(float(text) * factor))
+    except ValueError:
+        return None
+
+
+def _shared_sales(kpis, channels):
+    """Keep the Total sales card and the channel donut on one figure."""
+    rows = [dict(row) for row in channels]
+    current = sum(int(row["sales"] or 0) for row in rows)
+    target = next((_sales_amount(row.get("value")) for row in kpis if row.get("label") == "Total sales"), None)
+    if target and current and target != current:
+        used = 0
+        for index, row in enumerate(rows):
+            if index == len(rows) - 1:
+                row["sales"] = max(0, target - used)
+            else:
+                row["sales"] = int(round(int(row["sales"] or 0) * target / current))
+                used += row["sales"]
+    total = sum(int(row["sales"] or 0) for row in rows)
+    if total:
+        label = f"KES {total / 1000:.1f}K" if total >= 1000 else f"KES {total:,.0f}"
+        for row in kpis:
+            if row.get("label") == "Total sales":
+                row["value"] = label
+    return rows
+
+
 def dashboard_view(kpis, orders, products, channels, week):
     for kpi in kpis:
         kpi["good"] = bool(kpi["good"])
+    channels = _shared_sales(kpis, channels)
     recent = [{
         "id": order["id"],
         "customer": order["customer"],
