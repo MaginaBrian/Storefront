@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ChevronRight, CircleDollarSign, Globe, Library, MapPin, Pencil, Percent, Plus, Receipt, RotateCcw, Search, Store, X } from 'lucide-react'
-import { Modal } from '../components/Modal.jsx'
+import { ChevronLeft, CircleDollarSign, Eye, Globe, Info, Library, MapPin, Percent, Plus, Search, Store, Truck, X } from 'lucide-react'
+import { markets as marketApi } from '../api/resources.js'
 import { useJson } from '../lib/api.js'
 
 const FLAGS = {
@@ -16,6 +16,13 @@ const SUGGESTIONS = [
   { name: 'European Union', currency: 'EUR' },
 ]
 
+const CONDITIONS = [
+  { name: 'Kenya', currency: 'KES' },
+  { name: 'Uganda', currency: 'UGX' },
+  { name: 'Tanzania', currency: 'TZS' },
+  ...SUGGESTIONS,
+]
+
 const CURRENCY = {
   KES: 'Kenyan Shilling (KES)',
   UGX: 'Ugandan Shilling (UGX)',
@@ -24,77 +31,105 @@ const CURRENCY = {
   EUR: 'Euro (EUR)',
 }
 
-function MarketDetail({ market, onOpen, onSaved }) {
+function MarketEditor({ market, onOpen, onSaved }) {
+  const creating = !market
   const [store] = useJson('/api/store')
-  const [pages] = useJson('/api/content')
-  const [label, setLabel] = useState(market.name)
-  const [menu, setMenu] = useState(false)
+  const [settings] = useJson('/api/settings')
+  const [name, setName] = useState(market?.name || '')
+  const [status, setStatus] = useState(market?.status || 'active')
+  const [includes, setIncludes] = useState(market?.includes || (market ? market.name : ''))
+  const [currency, setCurrency] = useState(market?.currency || 'KES')
+  const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
-  useEffect(() => setLabel(market.name), [market.name])
-  const published = (pages || []).filter(page => page.status === 'visible').length
-  const save = patch => {
-    fetch(`/api/markets/${market.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    }).then(async response => {
-      if (!response.ok) throw new Error((await response.json()).error || 'Could not update market')
-      const next = await response.json()
+  const [busy, setBusy] = useState(false)
+  const storeName = (settings || []).find(row => row.key === 'store_name')?.value || 'Maison'
+  useEffect(() => {
+    setName(market?.name || '')
+    setStatus(market?.status || 'active')
+    setIncludes(market?.includes || (market ? market.name : ''))
+    setCurrency(market?.currency || 'KES')
+  }, [market])
+  const inherited = [
+    [CircleDollarSign, 'Currency', CURRENCY[currency] || currency, null],
+    [Library, 'Catalogs', 'All products', () => onOpen('catalogs')],
+    [Percent, 'Discounts', 'All eligible discounts', () => onOpen('discounts')],
+    [Globe, 'Domain / language', `${store?.domain || 'maison.co.ke'} · English`, () => onOpen('store')],
+    [Truck, 'Shipping', 'Not shipping', () => onOpen('settings', { section: 'shipping' })],
+    [Store, 'Online Store', store?.theme || 'Dawn', () => onOpen('store')],
+    [Library, 'Checkout and accounts', `${storeName} configuration`, () => onOpen('settings')],
+  ]
+  const persist = patch => {
+    if (!market) return
+    marketApi.patch(market.id, patch).then(next => {
       onSaved()
       if (next.name !== market.name) onOpen('markets', { market: next.name })
     }).catch(err => setError(err.message))
   }
-  const inherited = [
-    [CircleDollarSign, 'Currency', CURRENCY[market.currency] || market.currency],
-    [Library, 'Catalogs', 'All products', () => onOpen('catalogs')],
-    [Percent, 'Discounts', 'All eligible discounts', () => onOpen('discounts')],
-    [Globe, 'Domain / language', `${store?.domain || 'maison.co.ke'} • English`, () => onOpen('store')],
-    [Receipt, 'Taxes and duties', 'Collecting sales tax'],
-    [RotateCcw, 'Returns and cancellations', 'No rules set'],
-    [Store, 'Online Store', store?.theme || 'Dawn', () => onOpen('store')],
-    [Library, 'Checkout and accounts', 'Maison configuration', () => onOpen('settings')],
-  ]
+  const choose = item => {
+    setIncludes(item.name)
+    setCurrency(item.currency)
+    setAdding(false)
+    persist({ includes: item.name, currency: item.currency, name: name.trim() || market?.name || item.name, status })
+  }
+  const clearInclude = () => {
+    setIncludes('')
+    persist({ includes: '', name: name.trim() || market?.name || '', status, currency })
+  }
+  const save = event => {
+    event.preventDefault()
+    if (!name.trim()) { setError('Enter a market name.'); return }
+    setBusy(true)
+    setError('')
+    const body = { name: name.trim(), currency, status, includes }
+    const request = market ? marketApi.patch(market.id, body) : marketApi.create(body)
+    request.then(next => {
+      if (!next?.name) throw new Error('Could not save this market.')
+      onSaved()
+      onOpen('markets', { market: next.name })
+    }).catch(err => { setError(err.message); setBusy(false) })
+  }
+  const label = status === 'active' ? 'Active' : 'Draft'
   return (
-    <div className="order-page">
-      <div className="orders-top">
-        <div className="crumb">
-          <button type="button" className="text-link" onClick={() => onOpen('markets')}>Markets</button>
-          <span>/</span> {market.name}
-        </div>
-        <div className="menu-wrap">
-          <button type="button" className="ghost" onClick={() => setMenu(value => !value)}>More actions</button>
-          {menu && (
-            <div className="popover menu-pop">
-              <button type="button" onClick={() => onOpen('catalogs')}>View catalogs</button>
-              <button type="button" onClick={() => onOpen('store')}>View online store</button>
-              <button type="button" onClick={() => onOpen('discounts')}>View discounts</button>
-            </div>
-          )}
-        </div>
+    <form className="order-page" onSubmit={save}>
+      <div className="crumb">
+        <button type="button" className="icon-btn" aria-label="Markets" onClick={() => onOpen('markets')}><ChevronLeft size={16} /></button>
+        <button type="button" className="text-link" onClick={() => onOpen('markets')}>Markets</button>
+        <span>/</span><span>{creating ? 'New market' : name || market.name}</span>
       </div>
       <div className="market-title">
-        <h1>{market.name}</h1>
-        <span className="region-pill">Region</span>
-        <span className={`status-pill ${market.status}`}>{market.status[0].toUpperCase()}{market.status.slice(1)}</span>
+        <h1>{creating ? 'New market' : name || market.name}</h1>
+        <span className={`status-pill ${status}`}>{label}</span>
+        <button type="submit" className="solid" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
       {error && <p className="form-error">{error}</p>}
       <div className="market-detail">
         <div>
           <section className="detail-card">
-            <div className="name-status">
+            <div className="market-name-row">
               <label className="field">Name
-                <input value={label} onChange={e => setLabel(e.target.value)} onBlur={() => label.trim() && label !== market.name && save({ name: label })} />
+                <input aria-label="Name" placeholder="Name" value={name} onChange={e => setName(e.target.value)} onBlur={() => market && name.trim() && name !== market.name && persist({ name: name.trim(), status, currency, includes })} />
               </label>
-              <label className="field">Status
-                <select aria-label="Status" value={market.status} onChange={e => save({ status: e.target.value })}>
-                  <option value="active">Active</option>
-                  <option value="draft">Draft</option>
-                </select>
-              </label>
+              <select aria-label="Status" value={status} onChange={e => { setStatus(e.target.value); persist({ status: e.target.value, name: name.trim() || market?.name, currency, includes }) }}>
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+              </select>
             </div>
             <div className="include-line">
               <span>Includes</span>
-              <span className="include-chip">{FLAGS[market.name] || '🌐'} {market.name}</span>
-              <button type="button" aria-label="Edit includes"><Pencil size={14} /></button>
+              {includes ? (
+                <span className="include-chip">{FLAGS[includes] || '🌐'} {includes} <button type="button" aria-label="Remove condition" onClick={clearInclude}><X size={12} /></button></span>
+              ) : (
+                <span className="menu-wrap">
+                  <button type="button" className="text-link" onClick={() => setAdding(open => !open)}><Plus size={14} /> Add condition</button>
+                  {adding && (
+                    <div className="popover menu-pop">
+                      {CONDITIONS.map(item => (
+                        <button type="button" key={item.name} onClick={() => choose(item)}>{FLAGS[item.name] || '🌐'} {item.name}</button>
+                      ))}
+                    </div>
+                  )}
+                </span>
+              )}
             </div>
           </section>
           <h2>Customized</h2>
@@ -105,7 +140,8 @@ function MarketDetail({ market, onOpen, onSaved }) {
               <div className="inherit-row" key={title}>
                 <span><Icon size={15} /> {title}</span>
                 <em>→</em>
-                {action ? <button type="button" className="text-link" onClick={action}>{value}</button> : <span>{value}</span>}
+                <span>{value}</span>
+                {action ? <button type="button" className="icon-btn" aria-label={`Open ${title}`} onClick={action}><Eye size={15} /></button> : <span />}
               </div>
             ))}
           </section>
@@ -113,30 +149,15 @@ function MarketDetail({ market, onOpen, onSaved }) {
         <aside className="market-side">
           <div className="map-card" aria-hidden="true">
             <MapPin size={16} />
-            <i className={market.status === 'active' ? 'on' : ''} />
+            <span className="hier-line" />
+            <span className="hier-node">{creating ? '' : (FLAGS[includes || name] || '🌐')}</span>
           </div>
-          <section className="detail-card">
-            <h2>Parent market</h2>
-            <button type="button" className="parent-market" onClick={() => onOpen('markets')}><Store size={14} /> Store default</button>
-          </section>
-          <section className="detail-card">
-            <h2>More settings for {market.name}</h2>
-            <button type="button" className="side-link" onClick={() => onOpen('settings', { section: 'shipping' })}>
-              <span>Shipping<small>1 rate • Shipping to {market.name}</small></span>
-              <ChevronRight size={16} />
-            </button>
-            <button type="button" className="side-link" onClick={() => onOpen('settings')}>
-              <span>Customer privacy<small>Cookie banner, Data sharing opt-out</small></span>
-              <ChevronRight size={16} />
-            </button>
-            <button type="button" className="side-link" onClick={() => onOpen('content')}>
-              <span>Policies<small>{published || 1} published</small></span>
-              <ChevronRight size={16} />
-            </button>
-          </section>
+          {creating
+            ? <p className="hier-note"><Info size={14} /> Save to show market hierarchy</p>
+            : <p className="hier-note"><Store size={14} /> Store default</p>}
         </aside>
       </div>
-    </div>
+    </form>
   )
 }
 
@@ -146,30 +167,23 @@ export function Markets({ focus = {}, onOpen }) {
   const [graph, setGraph] = useState(false)
   const [regions, setRegions] = useState(false)
   const [hidden, setHidden] = useState(() => new Set())
-  const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('')
-  const [currency, setCurrency] = useState('USD')
   const visible = (rows || []).filter(row => row.name.toLowerCase().includes(query.trim().toLowerCase()))
   const picked = (rows || []).find(row => row.name === focus.market)
+  if (focus.create) return <MarketEditor onOpen={onOpen} onSaved={reload} />
   if (focus.market) {
     if (!rows) return <p className="muted">Loading market…</p>
     if (!picked) return <p className="muted">That market is not in the store. <button type="button" className="text-link" onClick={() => onOpen('markets')}>Back to markets</button></p>
-    return <MarketDetail market={picked} onOpen={onOpen} onSaved={reload} />
+    return <MarketEditor market={picked} onOpen={onOpen} onSaved={reload} />
   }
   const suggestions = SUGGESTIONS.filter(item => !(rows || []).some(row => row.name === item.name) && !hidden.has(item.name))
-  const add = item => {
-    fetch('/api/markets', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(item),
-    }).then(() => reload())
-  }
+  const add = item => marketApi.create(item).then(() => reload())
   return (
     <>
       <div className="orders-top">
         <h1>Markets</h1>
         <div className="orders-actions">
           <button type="button" className="ghost" onClick={() => setGraph(value => !value)}>Graph view</button>
-          <button type="button" className="solid" onClick={() => setCreating(true)}>Create market</button>
+          <button type="button" className="solid" onClick={() => onOpen('markets', { create: '1' })}>Create market</button>
         </div>
       </div>
       <div className="market-layout">
@@ -201,7 +215,7 @@ export function Markets({ focus = {}, onOpen }) {
                   <tr key={row.id} className="clickable" onClick={() => onOpen('markets', { market: row.name })}>
                     <td>{FLAGS[row.name] || '🌐'} {row.name}</td>
                     <td><span className={`pill ${row.status}`}>{row.status[0].toUpperCase()}{row.status.slice(1)}</span></td>
-                    <td>{FLAGS[row.name] || '🌐'} {row.name}</td>
+                    <td>{FLAGS[row.includes || row.name] || '🌐'} {row.includes || row.name}</td>
                     <td />
                   </tr>
                 ))}
@@ -219,18 +233,6 @@ export function Markets({ focus = {}, onOpen }) {
         </div>
       </div>
       <a className="learn" href="https://help.shopify.com/en/manual/markets" target="_blank" rel="noreferrer">Learn more about markets</a>
-      {creating && (
-        <Modal title="Create market" onClose={() => setCreating(false)}>
-          <form className="modal-form" onSubmit={event => { event.preventDefault(); add({ name, currency }); setCreating(false); setName('') }}>
-            <label>Name<input value={name} onChange={e => setName(e.target.value)} required autoFocus /></label>
-            <label>Currency<input value={currency} onChange={e => setCurrency(e.target.value)} /></label>
-            <div className="modal-actions">
-              <button type="button" className="ghost" onClick={() => setCreating(false)}>Cancel</button>
-              <button type="submit" className="solid">Save</button>
-            </div>
-          </form>
-        </Modal>
-      )}
     </>
   )
 }

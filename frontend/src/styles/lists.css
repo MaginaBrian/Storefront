@@ -31,12 +31,16 @@
 .region-pill { background: #f3f3f8; border-radius: 8px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
 .market-detail { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
 .market-detail h2 { font-size: 14px; margin: 4px 0 8px; }
-.name-status { display: grid; grid-template-columns: 1fr 140px; gap: 12px; }
-.include-line { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.market-name-row { display: grid; grid-template-columns: 1fr 120px; gap: 12px; align-items: end; }
+.market-name-row select { height: 38px; }
+.include-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .include-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: #fff; }
 .custom-empty { width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 16px; color: var(--muted); margin-bottom: 16px; }
 .inherit-list { display: grid; }
-.inherit-row { display: grid; grid-template-columns: 200px 16px 1fr; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.inherit-row { display: grid; grid-template-columns: 200px 16px 1fr auto; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.hier-line { width: 28px; height: 2px; background: #c8cad3; }
+.hier-node { min-width: 28px; height: 22px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; display: grid; place-items: center; font-size: 12px; }
+.hier-note { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; margin: 8px 0 0; }
 .inherit-row span { display: inline-flex; align-items: center; gap: 8px; }
 .inherit-row em { color: var(--muted); font-style: normal; }
 .market-side { display: grid; gap: 12px; }
@@ -52,7 +56,7 @@
 .menu-wrap { position: relative; }
 .suggest { background: #f4f0ff; }
 .suggest td { background: transparent; }
-@media (max-width: 1000px) { .meta-grid, .market-layout, .market-detail, .name-status, .analytics-grid, .analytics-kpis { grid-template-columns: 1fr; } .recent-card { grid-row: auto; } }
+@media (max-width: 1000px) { .meta-grid, .market-layout, .market-detail, .market-name-row, .analytics-grid, .analytics-kpis { grid-template-columns: 1fr; } .recent-card { grid-row: auto; } }
 .analytics-page { display: grid; gap: 12px; }
 .analytics-page h1, .orders-top h1 { display: flex; align-items: center; gap: 8px; }
 .analytics-page h1 span { font-weight: 500; color: var(--muted); font-size: 13px; }

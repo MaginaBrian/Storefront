@@ -235,8 +235,13 @@ class MarketSerializer(NamedSerializer):
 
     def validate(self):
         name = super().validate()
-        currency = self.text("currency", default="USD").upper()[:8] or "USD"
-        return {"name": name, "currency": currency}
+        currency = self.text("currency", default="KES").upper()[:8] or "KES"
+        return {
+            "name": name,
+            "currency": currency,
+            "status": self.choice("status", ("active", "draft"), "active"),
+            "includes": self.text("includes", limit=120),
+        }
 
 
 class CampaignSerializer(NamedSerializer):

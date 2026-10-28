@@ -220,6 +220,7 @@ html[data-theme="dark"] .suggest,
 html[data-theme="dark"] .cohort td,
 html[data-theme="dark"] .settings-note { background: #222633; color: var(--muted); }
 html[data-theme="dark"] .map-card { background: linear-gradient(#1c1f2a, #1c1f2a) 0 0 / 16px 16px, #14161d; }
+html[data-theme="dark"] .hier-node { background: #101218; }
 html[data-theme="dark"] .d-big { fill: var(--text); }
 html[data-theme="dark"] .d-small { fill: var(--muted); }
 html[data-theme="dark"] .info-banner { background: #143044; color: #c9e7ff; }

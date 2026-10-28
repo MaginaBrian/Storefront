@@ -453,6 +453,7 @@ def migrate(db):
         ("excludes", "TEXT NOT NULL DEFAULT ''"),
     ):
         _add_col(db, "collections", name, decl)
+    _add_col(db, "markets", "includes", "TEXT NOT NULL DEFAULT ''")
 
 
 def init_db():

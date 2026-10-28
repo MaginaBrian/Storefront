@@ -289,12 +289,16 @@ class Market(Model):
         with connect() as db:
             existing = db.execute("SELECT id FROM markets WHERE name = ?", (fields["name"],)).fetchone()
             if existing:
-                return cls.get(existing["id"]), 200
-            cur = db.execute(
-                "INSERT INTO markets (name, currency, status) VALUES (?, ?, 'active')",
-                (fields["name"], fields["currency"]),
-            )
-            return cls.get(cur.lastrowid), 201
+                market_id = existing["id"]
+                created = False
+            else:
+                cur = db.execute(
+                    "INSERT INTO markets (name, currency, status, includes) VALUES (?, ?, ?, ?)",
+                    (fields["name"], fields["currency"], fields["status"], fields["includes"]),
+                )
+                market_id = cur.lastrowid
+                created = True
+        return cls.get(market_id), 200 if not created else 201
 
     @classmethod
     def update(cls, market_id, body):
@@ -303,8 +307,13 @@ class Market(Model):
             raise ValidationError("Market not found", 404)
         name = str(body.get("name") or found["name"]).strip() or found["name"]
         status = body.get("status") if body.get("status") in ("active", "draft") else found["status"]
+        currency = str(body.get("currency") or found["currency"]).strip().upper()[:8] or found["currency"]
+        includes = str(body.get("includes") if "includes" in body else found.get("includes") or "")[:120]
         with connect() as db:
-            db.execute("UPDATE markets SET name = ?, status = ? WHERE id = ?", (name[:80], status, market_id))
+            db.execute(
+                "UPDATE markets SET name = ?, status = ?, currency = ?, includes = ? WHERE id = ?",
+                (name[:80], status, currency, includes, market_id),
+            )
         return cls.get(market_id)
 
 
