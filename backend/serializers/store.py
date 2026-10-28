@@ -358,6 +358,247 @@ def _shared_sales(kpis, channels):
     return rows
 
 
+def _window(range_key):
+    from datetime import date, datetime, timedelta
+    end = date.today()
+    if range_key == "today":
+        start = end
+    elif range_key == "7":
+        start = end - timedelta(days=6)
+    elif range_key == "90":
+        start = end - timedelta(days=89)
+    else:
+        start = end - timedelta(days=29)
+    return start, end, datetime.now()
+
+
+def _day(value):
+    return str(value)[:10]
+
+
+def _in_window(value, start, end):
+    day = _day(value)
+    return start.isoformat() <= day <= end.isoformat()
+
+
+def _stamp(day):
+    from datetime import datetime
+    return datetime.strptime(day, "%Y-%m-%d").strftime("%b ") + str(int(day[8:10]))
+
+
+def _span_label(start, end):
+    return f"{_stamp(start.isoformat())}–{_stamp(end.isoformat())}"
+
+
+def _days(start, end):
+    from datetime import timedelta
+    cursor = start
+    out = []
+    while cursor <= end:
+        out.append(cursor.isoformat())
+        cursor += timedelta(days=1)
+    return out
+
+
+def _pct(part, whole):
+    return f"{round(100 * part / whole)}%" if whole else "0%"
+
+
+def _headline(name, snapshot):
+    text = name.lower()
+    if "bought together" in text:
+        return f"{len(snapshot['bought_together'])} pairs"
+    if "fulfill" in text:
+        return f"{snapshot['orders_fulfilled']} fulfilled"
+    if "average order" in text:
+        return money(snapshot["aov"])
+    if "conversion" in text:
+        return f"{snapshot['conversion']}%"
+    if any(word in text for word in ("session", "visitor", "landing", "bounce", "device", "referrer")):
+        return f"{snapshot['sessions']} sessions"
+    if "item" in text or "quantity" in text:
+        return f"{snapshot['items']:,} items"
+    return money(snapshot["gross_sales"])
+
+
+def analytics_view(orders, lines, visits, products, addresses, pinned, range_key):
+    start, end, now = _window(range_key)
+    length = (end - start).days + 1
+    from datetime import timedelta
+    previous_end = start - timedelta(days=1)
+    previous_start = previous_end - timedelta(days=length - 1)
+    ranged = [row for row in orders if _in_window(row["created_at"], start, end)]
+    previous = [row for row in orders if _in_window(row["created_at"], previous_start, previous_end)]
+    ranged_ids = {row["id"] for row in ranged}
+    gross = sum(int(row["total"] or 0) for row in ranged)
+    previous_gross = sum(int(row["total"] or 0) for row in previous)
+    order_count = len(ranged)
+    fulfilled = sum(1 for row in ranged if row["fulfillment"] == "fulfilled")
+    earlier = {row["customer"] for row in orders if _day(row["created_at"]) < start.isoformat()}
+    buyers = {row["customer"] for row in ranged}
+    returning = len(buyers & earlier)
+    tax = round(gross * 16 / 116) if gross else 0
+    by_day = {day: 0 for day in _days(start, end)}
+    orders_by_day = {day: 0 for day in by_day}
+    for row in ranged:
+        by_day[_day(row["created_at"])] += int(row["total"] or 0)
+        orders_by_day[_day(row["created_at"])] += 1
+    sales_series = [{"day": day, "label": _stamp(day), "value": by_day[day]} for day in by_day]
+    aov_series = [{"day": day, "label": _stamp(day), "value": (by_day[day] // orders_by_day[day] if orders_by_day[day] else 0)} for day in by_day]
+    channels = {}
+    for row in ranged:
+        channels[row["channel"] or "Online Store"] = channels.get(row["channel"] or "Online Store", 0) + int(row["total"] or 0)
+    product_totals = {}
+    items = 0
+    titles_by_order = {}
+    for line in lines:
+        if line["order_id"] not in ranged_ids:
+            continue
+        title = line["title"] or "Product"
+        items += int(line["qty"] or 0)
+        bucket = product_totals.setdefault(title, {"name": title, "value": 0, "qty": 0})
+        bucket["value"] += int(line["line_total"] or 0)
+        bucket["qty"] += int(line["qty"] or 0)
+        titles_by_order.setdefault(line["order_id"], [])
+        if title not in titles_by_order[line["order_id"]]:
+            titles_by_order[line["order_id"]].append(title)
+    pairs = {}
+    for titles in titles_by_order.values():
+        ordered = sorted(set(titles))
+        for left in range(len(ordered)):
+            for right in range(left + 1, len(ordered)):
+                key = (ordered[left], ordered[right])
+                pairs[key] = pairs.get(key, 0) + 1
+    visit_rows = [row for row in visits if _in_window(row["created_at"], start, end)]
+    sessions = len(visit_rows)
+    cart = sum(int(row["added_to_cart"] or 0) for row in visit_rows)
+    checkout = sum(int(row["reached_checkout"] or 0) for row in visit_rows)
+    completed = sum(int(row["completed"] or 0) for row in visit_rows)
+    session_days = {day: 0 for day in by_day}
+    for row in visit_rows:
+        day = _day(row["created_at"])
+        if day in session_days:
+            session_days[day] += 1
+    devices, locations, landings, referrers, socials = {}, {}, {}, {}, {}
+    for row in visit_rows:
+        devices[row["device"] or "Desktop"] = devices.get(row["device"] or "Desktop", 0) + 1
+        place = " · ".join(part for part in (row["country"], row["region"], row["city"]) if part)
+        locations[place or "Unknown"] = locations.get(place or "Unknown", 0) + 1
+        landings[row["landing"] or "/"] = landings.get(row["landing"] or "/", 0) + 1
+        if row["referrer"]:
+            referrers[row["referrer"]] = referrers.get(row["referrer"], 0) + 1
+        if row["social"]:
+            socials[row["social"]] = socials.get(row["social"], 0) + 1
+    cities = {row["order_id"]: row for row in addresses}
+    first_month = {}
+    months_by_customer = {}
+    for row in orders:
+        month = _day(row["created_at"])[:7]
+        months_by_customer.setdefault(row["customer"], set()).add(month)
+        if row["customer"] not in first_month or month < first_month[row["customer"]]:
+            first_month[row["customer"]] = month
+    cohort_months = sorted(set(first_month.values()))[-6:]
+    cohorts = []
+    for month in cohort_months:
+        members = [name for name, first in first_month.items() if first == month]
+        values = []
+        year, mon = int(month[:4]), int(month[5:7])
+        for offset in range(6):
+            cursor = mon + offset
+            label = f"{year + (cursor - 1) // 12:04d}-{(cursor - 1) % 12 + 1:02d}"
+            if not members:
+                values.append("0%")
+            else:
+                stayed = sum(1 for name in members if label in months_by_customer.get(name, ()))
+                values.append(_pct(stayed, len(members)))
+        from datetime import datetime
+        cohorts.append({"month": datetime.strptime(month, "%Y-%m").strftime("%b %Y"), "values": values})
+    sell_through = []
+    for product in products:
+        base = int(product["sold"] or 0) + int(product["stock"] or 0)
+        sell_through.append({
+            "name": product["title"],
+            "rate": round(100 * int(product["sold"] or 0) / base) if base else 0,
+        })
+    sell_through.sort(key=lambda row: row["rate"], reverse=True)
+    recent_orders = sorted(orders, key=lambda row: row["created_at"], reverse=True)[:5]
+    today_orders = [row for row in orders if _day(row["created_at"]) == now.date().isoformat()]
+    cutoff = (now - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%S")
+    visitors_now = [row for row in visits if row["created_at"] >= cutoff]
+    snapshot = {
+        "gross_sales": gross,
+        "orders": order_count,
+        "orders_fulfilled": fulfilled,
+        "returning_rate": _pct(returning, len(buyers)) if buyers else "—",
+        "aov": gross // order_count if order_count else 0,
+        "items": items,
+        "sessions": sessions,
+        "conversion": _pct(completed, sessions),
+        "bought_together": [{"products": list(key), "orders": count} for key, count in sorted(pairs.items(), key=lambda item: -item[1])],
+    }
+    snapshot.update({
+        "refreshed": now.strftime("%I:%M %p").lstrip("0"),
+        "range": range_key if range_key in ("today", "7", "90") else "30",
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "label": _span_label(start, end),
+        "previous_label": _span_label(previous_start, previous_end),
+        "previous_gross": previous_gross,
+        "sales_series": sales_series,
+        "aov_series": aov_series,
+        "session_series": [{"day": day, "label": _stamp(day), "value": session_days[day]} for day in session_days],
+        "breakdown": [
+            {"label": "Gross sales", "value": gross},
+            {"label": "Discounts", "value": 0},
+            {"label": "Sales reversals", "value": 0},
+            {"label": "Net sales", "value": gross},
+            {"label": "Shipping charges", "value": 0},
+            {"label": "Return fees", "value": 0},
+            {"label": "Taxes", "value": tax},
+            {"label": "Total sales", "value": gross},
+        ],
+        "by_channel": [{"name": name, "value": value} for name, value in sorted(channels.items(), key=lambda item: -item[1])],
+        "by_product": sorted(product_totals.values(), key=lambda row: -row["value"]),
+        "funnel": [
+            {"label": "Sessions", "count": sessions, "pct": "100%" if sessions else "0%"},
+            {"label": "Added to cart", "count": cart, "pct": _pct(cart, sessions)},
+            {"label": "Reached checkout", "count": checkout, "pct": _pct(checkout, sessions)},
+            {"label": "Completed", "count": completed, "pct": _pct(completed, sessions)},
+        ],
+        "devices": [{"name": name, "count": count} for name, count in devices.items()],
+        "locations": [{"name": name, "count": count} for name, count in locations.items()],
+        "landing_pages": [{"path": path, "count": count} for path, count in sorted(landings.items(), key=lambda item: -item[1])],
+        "referrers": [{"name": name, "count": count} for name, count in sorted(referrers.items(), key=lambda item: -item[1])],
+        "social": [{"name": name, "count": count} for name, count in socials.items()],
+        "cohorts": cohorts,
+        "sell_through": sell_through[:8],
+        "fulfilled_orders": [
+            {"id": row["id"], "customer": row["customer"], "total": row["total"]}
+            for row in ranged if row["fulfillment"] == "fulfilled"
+        ],
+        "live": {
+            "visitors_now": len(visitors_now),
+            "visitor": visitors_now[-1] if visitors_now else None,
+            "orders_today": len(today_orders),
+            "orders_today_total": sum(int(row["total"] or 0) for row in today_orders),
+            "recent_orders": [{
+                "id": row["id"],
+                "customer": row["customer"],
+                "total": row["total"],
+                "created_at": _day(row["created_at"]),
+                "city": (cities.get(row["id"]) or {}).get("city") or "",
+            } for row in recent_orders],
+        },
+        "pinned": [{
+            "id": row["id"],
+            "name": row["name"],
+            "category": row["category"],
+            "headline": _headline(row["name"], snapshot),
+        } for row in pinned],
+    })
+    return snapshot
+
+
 def dashboard_view(kpis, orders, products, channels, week):
     for kpi in kpis:
         kpi["good"] = bool(kpi["good"])

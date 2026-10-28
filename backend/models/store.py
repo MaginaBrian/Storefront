@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from db import connect, query
 from models.base import Model
 from serializers.base import ValidationError
-from serializers.store import customer_name, dashboard_view, meta_summary, search_hits, segment_view
+from serializers.store import analytics_view, customer_name, dashboard_view, meta_summary, search_hits, segment_view
 
 
 class Customer(Model):
@@ -472,10 +472,21 @@ class Report(Model):
     def create(cls, fields):
         with connect() as db:
             cur = db.execute(
-                "INSERT INTO reports (name, category, last_viewed, created_by) VALUES (?, ?, ?, 'Piacì')",
+                "INSERT INTO reports (name, category, last_viewed, created_by, pinned) VALUES (?, ?, ?, 'Piacì', 1)",
                 (fields["name"], fields["category"][:40], date.today().isoformat()),
             )
             report_id = cur.lastrowid
+        return cls.get(report_id)
+
+    @classmethod
+    def update(cls, report_id, fields):
+        if not cls.get(report_id):
+            raise ValidationError("Report not found", 404)
+        with connect() as db:
+            if "pinned" in fields:
+                db.execute("UPDATE reports SET pinned = ? WHERE id = ?", (1 if fields["pinned"] else 0, report_id))
+            if fields.get("viewed"):
+                db.execute("UPDATE reports SET last_viewed = ? WHERE id = ?", (date.today().isoformat(), report_id))
         return cls.get(report_id)
 
     @classmethod
@@ -489,11 +500,19 @@ class Report(Model):
 
 class Analytics(Model):
     @classmethod
-    def series(cls):
-        return {
-            "channels": query("SELECT name, orders, sales, delta, view FROM channels"),
-            "week": [[row["day"], row["amount"]] for row in query("SELECT day, amount FROM week ORDER BY sort")],
-        }
+    def series(cls, range_key="30"):
+        payload = analytics_view(
+            query("SELECT id, created_at, customer, channel, total, fulfillment FROM orders"),
+            query("SELECT order_id, title, qty, line_total FROM order_lines"),
+            query("SELECT created_at, device, country, region, city, landing, referrer, social, added_to_cart, reached_checkout, completed FROM visits"),
+            query("SELECT title, sold, stock FROM products"),
+            query("SELECT order_id, city, country FROM order_address"),
+            query("SELECT id, name, category FROM reports WHERE pinned = 1 ORDER BY id DESC"),
+            range_key or "30",
+        )
+        payload["channels"] = query("SELECT name, orders, sales, delta, view FROM channels")
+        payload["week"] = [[row["day"], row["amount"]] for row in query("SELECT day, amount FROM week ORDER BY sort")]
+        return payload
 
 
 class Search(Model):

@@ -349,6 +349,14 @@ def create_report():
         return _invalid(exc)
 
 
+@bp.patch("/api/reports/<int:report_id>")
+def update_report(report_id):
+    try:
+        return jsonify(Report.update(report_id, _body()))
+    except ValidationError as exc:
+        return _invalid(exc)
+
+
 @bp.delete("/api/reports/<int:report_id>")
 def delete_report(report_id):
     try:
@@ -359,7 +367,7 @@ def delete_report(report_id):
 
 @bp.get("/api/analytics")
 def analytics():
-    return jsonify(Analytics.series())
+    return jsonify(Analytics.series(request.args.get("range") or "30"))
 
 
 @bp.get("/api/search")

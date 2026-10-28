@@ -1,13 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, Printer, Search, ShoppingBag } from 'lucide-react'
 import { Modal } from '../components/Modal.jsx'
 import { csv } from '../lib/csv.js'
 import { money } from '../lib/money.js'
 import { useJson } from '../lib/api.js'
 
-const TODAY = new Date('2026-10-16T12:00:00')
+const TODAY = new Date()
 const CATEGORIES = ['Acquisition', 'Behavior', 'Customers', 'Finances', 'Fraud', 'Inventory', 'Marketing', 'Orders', 'Performance', 'Profit Margin', 'Retail Sales', 'Sales', 'Store']
-const SESSION = { date: '2026-10-14', country: 'Kenya', region: 'Nairobi County', city: 'Nairobi', visitors: 1, sessions: 1 }
 
 const SPECS = {
   'Net payments by method': {
@@ -145,7 +144,28 @@ function dates(window) {
 function specFor(report) {
   if (SPECS[report.name]) return SPECS[report.name]
   const name = report.name.toLowerCase()
-  if (name.includes('session') || name.includes('visitor') || name.includes('bounce') || name.includes('landing') || name.includes('referrer')) {
+  if (name.includes('bought together') || name.includes('same order')) {
+    return { kind: 'pairs', viz: 'table', range: '90', compare: 'none', metric: 'Orders', dimension: 'Products', from: 'sales', show: 'orders' }
+  }
+  if (name.includes('device')) {
+    return { kind: 'device', viz: 'table', range: '30', compare: 'none', metric: 'Sessions', dimension: 'Device', from: 'sessions', show: 'sessions' }
+  }
+  if (name.includes('landing')) {
+    return { kind: 'landing', viz: 'table', range: '30', compare: 'none', metric: 'Sessions', dimension: 'Landing page', from: 'sessions', show: 'sessions' }
+  }
+  if (name.includes('by product') || name.includes('sell-through')) {
+    return { kind: 'product', viz: 'table', range: '30', compare: 'none', metric: 'Total sales', dimension: 'Product', from: 'sales', show: 'total_sales' }
+  }
+  if (name.includes('channel')) {
+    return { kind: 'channel', viz: 'table', range: '30', compare: 'none', metric: 'Total sales', dimension: 'Channel', from: 'sales', show: 'total_sales' }
+  }
+  if (name.includes('fulfilled')) {
+    return { kind: 'fulfilled', viz: 'table', range: '30', compare: 'none', metric: 'Orders fulfilled', dimension: 'Order', from: 'sales', show: 'orders' }
+  }
+  if (name.includes('average order')) {
+    return { kind: 'aov', viz: 'line', range: '30', compare: 'none', metric: 'Average order value', dimension: 'Day', from: 'sales', show: 'average_order_value', timeseries: 'day' }
+  }
+  if (name.includes('session') || name.includes('visitor') || name.includes('bounce') || name.includes('referrer')) {
     return { kind: 'sessions', viz: 'line', range: '30', compare: 'none', metric: 'Sessions', dimension: 'Day', from: 'sessions', show: 'sessions' }
   }
   if (name.includes('item') || name.includes('quantity')) {
@@ -254,6 +274,12 @@ function ReportView({ report, onOpen, onDeleted }) {
   const [lines] = useJson('/api/order-lines')
   const spec = specFor(report)
   const [range, setRange] = useState(spec.range)
+  const [stats] = useJson(`/api/analytics?range=${range}`)
+  useEffect(() => {
+    fetch(`/api/reports/${report.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ viewed: true }),
+    }).catch(() => {})
+  }, [report.id])
   const [compareOn, setCompareOn] = useState(spec.compare === 'previous')
   const [viz, setViz] = useState(spec.viz)
   const [controls, setControls] = useState(true)
@@ -272,7 +298,8 @@ function ReportView({ report, onOpen, onDeleted }) {
   }).reduce((sum, order) => sum + order.total, 0)
   const salesTotal = salesSeries.reduce((sum, row) => sum + row.value, 0)
   const itemTotal = itemSeries.reduce((sum, row) => sum + row.value, 0)
-  const sessionInRange = SESSION.date >= period.start && SESSION.date <= period.end
+  const sessions = stats?.sessions || 0
+  const sessionSeries = (stats?.session_series || []).map(row => ({ day: row.day, value: row.value }))
   const paidSeries = byDay(paid, period, order => order.total)
   const inPeriod = (orders || []).filter(order => {
     const day = order.created_at.slice(0, 10)
@@ -290,8 +317,20 @@ function ReportView({ report, onOpen, onDeleted }) {
       ? [['Managed Markets taxes', 0]]
       : [['Gross sales', salesTotal], ['Discounts', 0], ['Returns', 0], ['Net sales', salesTotal], ['Shipping charges', 0], ['Taxes', includedTax], ['Total sales', salesTotal]]
   const summaryTotal = summaryRows[summaryRows.length - 1][1]
-  const moneyScale = spec.kind === 'sales' || spec.kind === 'payments' || spec.kind === 'payments-time' || spec.kind === 'by-order' || spec.kind === 'summary' || spec.kind === 'shopify'
-  const headline = spec.kind === 'payments'
+  const moneyScale = spec.kind === 'sales' || spec.kind === 'payments' || spec.kind === 'payments-time' || spec.kind === 'by-order' || spec.kind === 'summary' || spec.kind === 'shopify' || spec.kind === 'aov'
+  const headline = spec.kind === 'pairs'
+    ? `${(stats?.bought_together || []).length} product pairs`
+    : spec.kind === 'channel'
+      ? `${money(stats?.gross_sales || 0)} by channel`
+      : spec.kind === 'product'
+        ? `${(stats?.by_product || []).length} products`
+        : spec.kind === 'device' || spec.kind === 'landing' || spec.kind === 'location' || spec.kind === 'sessions'
+          ? `${sessions} sessions`
+          : spec.kind === 'fulfilled'
+            ? `${stats?.orders_fulfilled || 0} orders fulfilled`
+            : spec.kind === 'aov'
+              ? `${money(stats?.aov || 0)} average order value`
+              : spec.kind === 'payments'
     ? `${money(paymentTotal)} ${spec.metric}`
     : spec.kind === 'shopify'
       ? `${money(0)} ${spec.metric}`
@@ -305,14 +344,15 @@ function ReportView({ report, onOpen, onDeleted }) {
               ? `${money(summaryTotal)} ${spec.metric}`
               : spec.kind === 'rate'
                 ? `0% ${spec.metric}`
-                : spec.kind === 'location' || spec.kind === 'sessions'
-                  ? `${sessionInRange ? 1 : 0} Sessions`
-                  : `No ${spec.metric.toLowerCase()} in this range`
+                : `No ${spec.metric.toLowerCase()} in this range`
   const refreshed = TODAY.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   const exportRows = () => {
     if (spec.kind === 'payments') csv([[spec.dimension, spec.metric], ['Summary', money(paymentTotal)], ['None', money(paymentTotal)]], 'net-payments.csv', { excel: true })
     else if (spec.kind === 'shopify') csv([['Payment gateway', 'Gross payments'], ['Shopify Payments', money(0)]], 'shopify-payments.csv', { excel: true })
-    else if (spec.kind === 'location') csv([['Country', 'Region', 'City', 'Visitors', 'Sessions'], ['Kenya', 'Nairobi County', 'Nairobi', sessionInRange ? 1 : 0, sessionInRange ? 1 : 0]], 'sessions-by-location.csv', { excel: true })
+    else if (spec.kind === 'location') csv([['Location', 'Sessions'], ...(stats?.locations || []).map(row => [row.name, row.count])], 'sessions-by-location.csv', { excel: true })
+    else if (spec.kind === 'pairs') csv([['Products', 'Orders'], ...(stats?.bought_together || []).map(row => [row.products.join(' + '), row.orders])], 'bought-together.csv', { excel: true })
+    else if (spec.kind === 'channel') csv([['Channel', 'Total sales'], ...(stats?.by_channel || []).map(row => [row.name, money(row.value)])], 'sales-by-channel.csv', { excel: true })
+    else if (spec.kind === 'product') csv([['Product', 'Quantity', 'Total sales'], ...(stats?.by_product || []).map(row => [row.name, row.qty, money(row.value)])], 'sales-by-product.csv', { excel: true })
     else if (spec.kind === 'items') csv([['Day', 'Quantity ordered'], ...itemSeries.map(row => [row.day, row.value])], 'items-ordered.csv', { excel: true })
     else if (spec.kind === 'by-order') csv([['Order', 'Customer', spec.metric], ...orderRows.map(order => [`#${order.id}`, order.customer, money(order.value)])], 'orders.csv', { excel: true })
     else if (spec.kind === 'summary') csv([['Component', 'Amount'], ...summaryRows.map(row => [row[0], money(row[1])])], 'summary.csv', { excel: true })
@@ -324,7 +364,7 @@ function ReportView({ report, onOpen, onDeleted }) {
     fetch(`/api/reports/${report.id}`, { method: 'DELETE' }).then(() => { onDeleted(); onOpen('reports') })
   }
   const rateSeries = dates(period).map(day => ({ day, value: 0 }))
-  const series = spec.kind === 'items' ? itemSeries : spec.kind === 'sessions' ? dates(period).map(day => ({ day, value: day === SESSION.date ? 1 : 0 })) : spec.kind === 'payments-time' || spec.field === 'netpay' ? paidSeries : spec.field === 'cogs' || spec.field === 'discount' ? rateSeries : spec.kind === 'rate' ? rateSeries : salesSeries
+  const series = spec.kind === 'items' ? itemSeries : spec.kind === 'sessions' || spec.kind === 'device' || spec.kind === 'landing' ? sessionSeries : spec.kind === 'aov' ? (stats?.aov_series || []).map(row => ({ day: row.day, value: row.value })) : spec.kind === 'payments-time' || spec.field === 'netpay' ? paidSeries : spec.field === 'cogs' || spec.field === 'discount' ? rateSeries : spec.kind === 'rate' ? rateSeries : salesSeries
   return (
     <div className="order-page">
       <div className="orders-top">
@@ -359,10 +399,10 @@ function ReportView({ report, onOpen, onDeleted }) {
           <section className="chart-card report-chart">
             <h2>{spec.metric}</h2>
             {viz === 'donut' && <Donut cents={spec.kind === 'shopify' ? 0 : spec.kind === 'payments' ? paymentTotal : salesTotal} label={spec.kind === 'shopify' ? 'Shopify Payments' : 'None'} />}
-            {viz === 'table' && <p>{spec.kind === 'summary' ? money(summaryTotal) : money(orderTotal)}</p>}
+            {viz === 'table' && !['pairs', 'channel', 'product', 'device', 'landing', 'fulfilled', 'location'].includes(spec.kind) && <p>{spec.kind === 'summary' ? money(summaryTotal) : money(orderTotal)}</p>}
             {viz === 'horizontal' && (
-              sessionInRange
-                ? <div className="hbar-card"><p>Kenya · Nairobi County · Nairobi</p><div className="hbar" /></div>
+              (stats?.locations || []).length
+                ? (stats.locations.map(row => <div className="hbar-card" key={row.name}><p>{row.name}</p><div className="hbar" /><b>{row.count}</b></div>))
                 : <p className="muted chart-empty">No sessions in this date range.</p>
             )}
             {viz === 'line' && (
@@ -386,14 +426,62 @@ function ReportView({ report, onOpen, onDeleted }) {
             )}
             {spec.kind === 'location' && (
               <table>
-                <thead><tr><th>Session country</th><th>Session region</th><th>Session city</th><th>Online store visitors</th><th>Sessions</th></tr></thead>
+                <thead><tr><th>Location</th><th>Sessions</th></tr></thead>
                 <tbody>
-                  <tr><td>Summary</td><td /><td /><td>{sessionInRange ? 1 : 0}</td><td>{sessionInRange ? 1 : 0}</td></tr>
-                  {sessionInRange && <tr><td>Kenya</td><td>Nairobi County</td><td>Nairobi</td><td>1</td><td>1</td></tr>}
+                  {(stats?.locations || []).map(row => <tr key={row.name}><td>{row.name}</td><td>{row.count}</td></tr>)}
+                  {stats && !(stats.locations || []).length && <tr><td colSpan={2}>No sessions in this date range.</td></tr>}
                 </tbody>
               </table>
             )}
-            {(spec.kind === 'items' || spec.kind === 'sales' || spec.kind === 'sessions' || spec.kind === 'empty' || spec.kind === 'rate' || spec.kind === 'payments-time') && (
+            {spec.kind === 'device' && (
+              <table>
+                <thead><tr><th>Device</th><th>Sessions</th></tr></thead>
+                <tbody>{(stats?.devices || []).map(row => <tr key={row.name}><td>{row.name}</td><td>{row.count}</td></tr>)}</tbody>
+              </table>
+            )}
+            {spec.kind === 'landing' && (
+              <table>
+                <thead><tr><th>Landing page</th><th>Sessions</th></tr></thead>
+                <tbody>{(stats?.landing_pages || []).map(row => <tr key={row.path}><td>{row.path}</td><td>{row.count}</td></tr>)}</tbody>
+              </table>
+            )}
+            {spec.kind === 'channel' && (
+              <table>
+                <thead><tr><th>Channel</th><th>Total sales</th></tr></thead>
+                <tbody>{(stats?.by_channel || []).map(row => <tr key={row.name}><td>{row.name}</td><td>{money(row.value)}</td></tr>)}</tbody>
+              </table>
+            )}
+            {spec.kind === 'product' && (
+              <table>
+                <thead><tr><th>Product</th><th>Quantity</th><th>Total sales</th></tr></thead>
+                <tbody>{(stats?.by_product || []).map(row => <tr key={row.name}><td>{row.name}</td><td>{row.qty.toLocaleString()}</td><td>{money(row.value)}</td></tr>)}</tbody>
+              </table>
+            )}
+            {spec.kind === 'pairs' && (
+              <table>
+                <thead><tr><th>Products</th><th>Orders</th></tr></thead>
+                <tbody>
+                  {(stats?.bought_together || []).map(row => <tr key={row.products.join('|')}><td>{row.products.join(' + ')}</td><td>{row.orders}</td></tr>)}
+                  {stats && !(stats.bought_together || []).length && <tr><td colSpan={2}>No order in this range contains more than one product.</td></tr>}
+                </tbody>
+              </table>
+            )}
+            {spec.kind === 'fulfilled' && (
+              <table>
+                <thead><tr><th>Order</th><th>Customer</th><th>Total</th></tr></thead>
+                <tbody>
+                  {(stats?.fulfilled_orders || []).map(order => (
+                    <tr key={order.id}>
+                      <td><button type="button" className="text-link" onClick={() => onOpen('orders', { order: order.id })}>#{order.id}</button></td>
+                      <td>{order.customer}</td>
+                      <td>{money(order.total)}</td>
+                    </tr>
+                  ))}
+                  {stats && !(stats.fulfilled_orders || []).length && <tr><td colSpan={3}>No fulfilled orders in this date range.</td></tr>}
+                </tbody>
+              </table>
+            )}
+            {(spec.kind === 'items' || spec.kind === 'sales' || spec.kind === 'sessions' || spec.kind === 'empty' || spec.kind === 'rate' || spec.kind === 'payments-time' || spec.kind === 'aov') && (
               <table>
                 <thead><tr><th>Day</th><th>{spec.metric}</th></tr></thead>
                 <tbody>

@@ -457,6 +457,53 @@ def migrate(db):
     _add_col(db, "market_catalogs", "status", "TEXT NOT NULL DEFAULT 'active'")
     _add_col(db, "market_catalogs", "kind", "TEXT NOT NULL DEFAULT 'full'")
     _add_col(db, "market_catalogs", "config", "TEXT NOT NULL DEFAULT '{}'")
+    _add_col(db, "reports", "pinned", "INTEGER NOT NULL DEFAULT 0")
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS visits (
+            id INTEGER PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            device TEXT NOT NULL DEFAULT 'Desktop',
+            country TEXT NOT NULL DEFAULT 'Kenya',
+            region TEXT NOT NULL DEFAULT '',
+            city TEXT NOT NULL DEFAULT '',
+            landing TEXT NOT NULL DEFAULT '/',
+            referrer TEXT NOT NULL DEFAULT '',
+            social TEXT NOT NULL DEFAULT '',
+            added_to_cart INTEGER NOT NULL DEFAULT 0,
+            reached_checkout INTEGER NOT NULL DEFAULT 0,
+            completed INTEGER NOT NULL DEFAULT 0
+        )"""
+    )
+    if db.execute("SELECT COUNT(*) FROM visits").fetchone()[0] == 0:
+        rows = db.execute(
+            """SELECT o.created_at, o.channel, a.city, a.country,
+                      (SELECT title FROM order_lines WHERE order_id = o.id ORDER BY id LIMIT 1) AS product
+               FROM orders o LEFT JOIN order_address a ON a.order_id = o.id"""
+        ).fetchall()
+        for row in rows:
+            product = row["product"] or "store"
+            slug = "/" + "".join(ch.lower() if ch.isalnum() else "-" for ch in product).strip("-")
+            social = row["channel"] if row["channel"] in ("Instagram", "WhatsApp") else ""
+            db.execute(
+                """INSERT INTO visits
+                   (created_at, device, country, region, city, landing, referrer, social, added_to_cart, reached_checkout, completed)
+                   VALUES (?, 'Desktop', ?, '', ?, ?, ?, ?, 1, 1, 1)""",
+                (row["created_at"], row["country"] or "Kenya", row["city"] or "", slug or "/store", row["channel"] or "", social),
+            )
+    have = {row["name"] for row in db.execute("SELECT name FROM reports")}
+    today = datetime.now().strftime("%Y-%m-%d")
+    for name, category in (
+        ("Total sales by channel", "Sales"),
+        ("Total sales by product", "Sales"),
+        ("Average order value over time", "Sales"),
+        ("Products bought together", "Orders"),
+        ("Orders fulfilled", "Orders"),
+    ):
+        if name not in have:
+            db.execute(
+                "INSERT INTO reports (name, category, last_viewed, created_by, pinned) VALUES (?, ?, ?, 'Piacì', 0)",
+                (name, category, today),
+            )
 
 
 def init_db():
