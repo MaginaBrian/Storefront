@@ -198,10 +198,26 @@ def market_catalogs():
     return jsonify(MarketCatalog.all())
 
 
+@bp.get("/api/market-catalogs/<int:catalog_id>")
+def market_catalog(catalog_id):
+    found = MarketCatalog.get(catalog_id)
+    if not found:
+        return jsonify(error="Catalog not found"), 404
+    return jsonify(found)
+
+
 @bp.post("/api/market-catalogs")
 def create_market_catalog():
     try:
         return jsonify(MarketCatalog.create(MarketCatalogSerializer.load(_body()))), 201
+    except ValidationError as exc:
+        return _invalid(exc)
+
+
+@bp.patch("/api/market-catalogs/<int:catalog_id>")
+def update_market_catalog(catalog_id):
+    try:
+        return jsonify(MarketCatalog.update(catalog_id, MarketCatalogSerializer.load(_body())))
     except ValidationError as exc:
         return _invalid(exc)
 

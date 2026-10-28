@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 
 from db import connect, query
@@ -246,13 +247,78 @@ class MarketCatalog(Model):
     order = "id DESC"
 
     @classmethod
+    def view(cls, row):
+        if not row:
+            return None
+        try:
+            config = json.loads(row.get("config") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            config = {}
+        if not isinstance(config, dict):
+            config = {}
+        markets = config.get("markets") if isinstance(config.get("markets"), list) else []
+        markets = [str(name) for name in markets if str(name).strip()]
+        if not markets and row.get("market"):
+            markets = [row["market"]]
+        prices = config.get("prices") if isinstance(config.get("prices"), dict) else {}
+        products = config.get("products") if isinstance(config.get("products"), list) else []
+        return {
+            "id": row["id"],
+            "title": row["title"],
+            "market": markets[0] if markets else "",
+            "markets": markets,
+            "status": row.get("status") or "active",
+            "kind": row.get("kind") or "full",
+            "adjustment": int(config.get("adjustment") or 0),
+            "compare": bool(config.get("compare")),
+            "auto_include": config.get("auto_include", True) is not False,
+            "products": products,
+            "prices": prices,
+            "created_at": row.get("created_at"),
+        }
+
+    @classmethod
+    def all(cls, order=None):
+        return [cls.view(row) for row in super().all(order)]
+
+    @classmethod
+    def get(cls, key):
+        return cls.view(super().get(key))
+
+    @staticmethod
+    def _config(fields):
+        return json.dumps({
+            "markets": fields["markets"],
+            "adjustment": fields["adjustment"],
+            "compare": fields["compare"],
+            "auto_include": fields["auto_include"],
+            "products": fields["products"],
+            "prices": fields["prices"],
+        })
+
+    @classmethod
     def create(cls, fields):
         with connect() as db:
             cur = db.execute(
-                "INSERT INTO market_catalogs (title, market, created_at) VALUES (?, ?, ?)",
-                (fields["title"], fields["market"], date.today().isoformat()),
+                """INSERT INTO market_catalogs (title, market, created_at, status, kind, config)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    fields["title"], fields["markets"][0], date.today().isoformat(),
+                    fields["status"], fields["kind"], cls._config(fields),
+                ),
             )
             catalog_id = cur.lastrowid
+        return cls.get(catalog_id)
+
+    @classmethod
+    def update(cls, catalog_id, fields):
+        if not super().get(catalog_id):
+            raise ValidationError("Catalog not found", 404)
+        with connect() as db:
+            db.execute(
+                "UPDATE market_catalogs SET title = ?, market = ?, status = ?, kind = ?, config = ? WHERE id = ?",
+                (fields["title"], fields["markets"][0], fields["status"], fields["kind"], cls._config(fields), catalog_id),
+            )
         return cls.get(catalog_id)
 
 

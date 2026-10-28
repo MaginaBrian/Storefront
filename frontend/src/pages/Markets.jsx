@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronLeft, CircleDollarSign, Eye, Globe, Info, Library, MapPin, Percent, Plus, Search, Store, Truck, X } from 'lucide-react'
 import { markets as marketApi } from '../api/resources.js'
 import { useJson } from '../lib/api.js'
+import { CATALOG_KINDS } from '../serializers/catalog.js'
 
 const FLAGS = {
   Kenya: '🇰🇪',
@@ -35,6 +36,12 @@ function MarketEditor({ market, onOpen, onSaved }) {
   const creating = !market
   const [store] = useJson('/api/store')
   const [settings] = useJson('/api/settings')
+  const [catalogRows] = useJson('/api/market-catalogs')
+  const assigned = (catalogRows || []).filter(row => {
+    const names = row.markets?.length ? row.markets : (row.market ? [row.market] : [])
+    return market && names.includes(market.name)
+  })
+  const catalogLabel = assigned.length ? assigned.map(row => row.title).join(', ') : 'All products'
   const [name, setName] = useState(market?.name || '')
   const [status, setStatus] = useState(market?.status || 'active')
   const [includes, setIncludes] = useState(market?.includes || (market ? market.name : ''))
@@ -51,7 +58,7 @@ function MarketEditor({ market, onOpen, onSaved }) {
   }, [market])
   const inherited = [
     [CircleDollarSign, 'Currency', CURRENCY[currency] || currency, null],
-    [Library, 'Catalogs', 'All products', () => onOpen('catalogs')],
+    [Library, 'Catalogs', catalogLabel, () => assigned.length === 1 ? onOpen('catalogs', { catalog: assigned[0].id }) : onOpen('catalogs')],
     [Percent, 'Discounts', 'All eligible discounts', () => onOpen('discounts')],
     [Globe, 'Domain / language', `${store?.domain || 'maison.co.ke'} · English`, () => onOpen('store')],
     [Truck, 'Shipping', 'Not shipping', () => onOpen('settings', { section: 'shipping' })],
@@ -133,7 +140,16 @@ function MarketEditor({ market, onOpen, onSaved }) {
             </div>
           </section>
           <h2>Customized</h2>
-          <button type="button" className="custom-empty" onClick={() => onOpen('catalogs', { create: '1' })}>Create unique configurations for customers in this market</button>
+          {assigned.map(row => (
+            <button type="button" key={row.id} className="custom-empty" onClick={() => onOpen('catalogs', { catalog: row.id })}>
+              <strong>{row.title}</strong>
+              <span>{CATALOG_KINDS[row.kind] || 'Full catalog'}</span>
+            </button>
+          ))}
+          {assigned.some(row => row.kind === 'pricing') && assigned.some(row => row.kind === 'publication') && (
+            <p className="hint">Prices come from {assigned.filter(row => row.kind === 'pricing').map(row => row.title).join(', ')}. Products come from {assigned.filter(row => row.kind === 'publication').map(row => row.title).join(', ')}.</p>
+          )}
+          <button type="button" className="custom-empty" onClick={() => onOpen('catalogs', market ? { create: '1', market: market.name } : { create: '1' })}>Create unique configurations for customers in this market</button>
           <h2>Inherited</h2>
           <section className="detail-card inherit-list">
             {inherited.map(([Icon, title, value, action]) => (

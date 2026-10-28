@@ -454,6 +454,9 @@ def migrate(db):
     ):
         _add_col(db, "collections", name, decl)
     _add_col(db, "markets", "includes", "TEXT NOT NULL DEFAULT ''")
+    _add_col(db, "market_catalogs", "status", "TEXT NOT NULL DEFAULT 'active'")
+    _add_col(db, "market_catalogs", "kind", "TEXT NOT NULL DEFAULT 'full'")
+    _add_col(db, "market_catalogs", "config", "TEXT NOT NULL DEFAULT '{}'")
 
 
 def init_db():

@@ -298,8 +298,11 @@ html[data-theme="dark"] .dash .top li {
 html[data-theme="dark"] .dash .channel-hit:hover,
 html[data-theme="dark"] .dash .top-hit:hover { background: color-mix(in srgb, #fff 8%, transparent); }
 html[data-theme="dark"] .dash .bars {
-  background: repeating-linear-gradient(color-mix(in srgb, #fff 10%, transparent) 0 1px, transparent 1px 28px);
+  background: repeating-linear-gradient(color-mix(in srgb, #fff 18%, transparent) 0 1px, transparent 1px 28px);
 }
+html[data-theme="dark"] .dash .bar { background: #8b94e8; }
+html[data-theme="dark"] .dash .bar:hover { background: #c3c8f5; }
+html[data-theme="dark"] .dash .bar.hot { background: linear-gradient(#e4e6ef, #5b6bd1); }
 @keyframes dash-rise {
   0% { opacity: 0; transform: translateY(18px); filter: blur(8px); }
   60% { opacity: 1; filter: blur(0); }

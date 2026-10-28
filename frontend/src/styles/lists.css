@@ -36,6 +36,9 @@
 .include-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .include-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: #fff; }
 .custom-empty { width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 16px; color: var(--muted); margin-bottom: 16px; }
+.custom-empty strong { display: block; color: var(--text); font-weight: 600; }
+.custom-empty span { display: block; margin-top: 4px; }
+.include-picks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .inherit-list { display: grid; }
 .inherit-row { display: grid; grid-template-columns: 200px 16px 1fr auto; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .hier-line { width: 28px; height: 2px; background: #c8cad3; }

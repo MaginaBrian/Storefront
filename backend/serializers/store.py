@@ -211,10 +211,66 @@ class BlogPostSerializer(NamedSerializer):
 class MarketCatalogSerializer(NamedSerializer):
     key = "title"
     message = "Enter a catalog title."
+    limit = 255
 
     def validate(self):
         title = super().validate()
-        return {"title": title, "market": self.text("market")[:40] or "Kenya"}
+        kind = self.choice("kind", ("full", "pricing", "publication"), "full")
+        status = self.choice("status", ("active", "draft"), "active")
+        markets = []
+        raw_markets = self.raw("markets")
+        if isinstance(raw_markets, str):
+            raw_markets = [part.strip() for part in raw_markets.split(",") if part.strip()]
+        if not isinstance(raw_markets, list):
+            fallback = self.text("market")
+            raw_markets = [fallback] if fallback else []
+        for name in raw_markets:
+            cleaned = str(name).strip()[:40]
+            if cleaned and cleaned not in markets:
+                markets.append(cleaned)
+        if not markets:
+            raise ValidationError("Add a market.")
+        adjustment = self.integer("adjustment", 0)
+        if adjustment is None or adjustment < -90 or adjustment > 1000:
+            raise ValidationError("Enter an adjustment between -90 and 1000.")
+        products = []
+        for item in self.raw("products") if isinstance(self.raw("products"), list) else []:
+            try:
+                products.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        prices = {}
+        raw_prices = self.raw("prices") if isinstance(self.raw("prices"), dict) else {}
+        for key, value in raw_prices.items():
+            try:
+                cents = int(value)
+                item_id = int(key)
+            except (TypeError, ValueError):
+                continue
+            if cents >= 0:
+                prices[str(item_id)] = cents
+        auto = self.flag("auto_include", True)
+        compare = self.flag("compare")
+        if kind == "pricing":
+            products = []
+            auto = True
+        if kind == "publication":
+            adjustment = 0
+            prices = {}
+            compare = False
+        if kind != "pricing" and not auto and not products:
+            raise ValidationError("Include at least one product.")
+        return {
+            "title": title,
+            "kind": kind,
+            "status": status,
+            "markets": markets[:12],
+            "adjustment": adjustment,
+            "compare": compare,
+            "auto_include": auto,
+            "products": products,
+            "prices": prices,
+        }
 
 
 class RolloutSerializer(Serializer):
