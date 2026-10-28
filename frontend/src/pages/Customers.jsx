@@ -6,11 +6,6 @@ import { useApi, useJson } from '../lib/api.js'
 import { csv } from '../lib/csv.js'
 import { money } from '../lib/money.js'
 
-function activityLabel(iso) {
-  const date = new Date(`${iso}T00:00:00`)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
 function place(location) {
   if (!location) return '—'
   return location.includes(',') ? location : `${location}, Kenya`
@@ -275,8 +270,6 @@ export function Customers({ focus = {}, onOpen }) {
   const [rows, reload] = useApi('/api/customers')
   const [segments] = useJson('/api/segments')
   const [profile, setProfile] = useState(null)
-  const [segment, setSegment] = useState(null)
-  const [segmentRows, setSegmentRows] = useState(null)
   const [describe, setDescribe] = useState('')
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState(() => new Set())
@@ -292,17 +285,10 @@ export function Customers({ focus = {}, onOpen }) {
     return () => { ignore = true }
   }, [focus.customer])
   useEffect(() => {
-    if (!focus.segment) { setSegment(null); setSegmentRows(null); return }
-    let ignore = false
-    fetch(`/api/segments/${focus.segment}`).then(r => r.json()).then(data => {
-      if (ignore) return
-      setSegment(data.segment || null)
-      setSegmentRows(data.customers || [])
-    })
-    return () => { ignore = true }
-  }, [focus.segment])
+    if (focus.segment) onOpen('segments', { segment: focus.segment })
+  }, [focus.segment, onOpen])
 
-  const source = focus.segment ? segmentRows : rows
+  const source = rows
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
     return (source || []).filter(row => segmentMatch(describe, row) && (!q || [row.name, row.email, row.location].join(' ').toLowerCase().includes(q)))
@@ -327,15 +313,6 @@ export function Customers({ focus = {}, onOpen }) {
           <button type="button" className="solid" onClick={() => onOpen('customers', { create: '1' })}>Add customer</button>
         </div>
       </div>
-      {segment && (
-        <section className="handoff">
-          <div>
-            <h2>{segment.name}</h2>
-            <p>{segment.percent}% of customers · Created on {activityLabel(segment.last_activity)} · {segment.created_by}</p>
-          </div>
-          <button type="button" className="ghost" onClick={() => onOpen('segments')}>All segments</button>
-        </section>
-      )}
       {focus.customer && (
         <section className="handoff">
           <div>
@@ -389,7 +366,7 @@ export function Customers({ focus = {}, onOpen }) {
       {described.length > 0 && (
         <div className="picker segment-hits">
           {described.map(row => (
-            <button type="button" key={row.id} onClick={() => onOpen('customers', { segment: row.id })}>{row.name}</button>
+            <button type="button" key={row.id} onClick={() => onOpen('segments', { segment: row.id })}>{row.name}</button>
           ))}
         </div>
       )}
@@ -424,7 +401,7 @@ export function Customers({ focus = {}, onOpen }) {
                   <td>{money(row.spent)}</td>
                 </tr>
               ))}
-              {source && shown.length === 0 && <tr><td className="muted" colSpan={6}>{focus.segment ? 'No customers in this segment.' : 'No customers match this search.'}</td></tr>}
+              {source && shown.length === 0 && <tr><td className="muted" colSpan={6}>No customers match this search.</td></tr>}
             </tbody>
           </table>
         </div>

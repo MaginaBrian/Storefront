@@ -309,6 +309,16 @@ tr.picked td { background: #eef0ff; }
 .save-bar .solid { background: #fff; color: #1a1c2c; }
 .save-bar.ok svg { color: #3dd68c; }
 .po-top { display: flex; align-items: center; gap: 8px; }
+.segment-crumb { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.segment-crumb span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.segment-count { display: flex; align-items: baseline; gap: 16px; }
+.segment-count b { font-size: 20px; }
+.segment-count span { color: var(--muted); padding-left: 16px; border-left: 1px solid var(--line); }
+.segment-blurb { margin: 4px 0 0; }
+.segment-empty { display: grid; justify-items: center; gap: 4px; padding: 72px 16px; text-align: center; color: var(--muted); }
+.segment-empty h2 { margin: 8px 0 0; font-size: 16px; color: var(--text); }
+.segment-empty p { margin: 0; }
+.po-actions .ghost { display: inline-flex; align-items: center; gap: 6px; }
 .po-top .save-bar { position: static; margin: 0; }
 .po-top-mid { flex: 1; display: flex; justify-content: center; min-height: 40px; }
 .po-actions { display: flex; align-items: center; gap: 8px; }

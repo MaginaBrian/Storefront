@@ -71,7 +71,7 @@ export default function App() {
     setSearch('')
     setHits([])
   }
-  const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }, { id: 'collections', label: 'Collections' }, { id: 'inventory', label: 'Inventory' }, { id: 'purchase-orders', label: 'Purchase orders' }, { id: 'transfers', label: 'Transfers' }, { id: 'gift-cards', label: 'Gift cards' }, { id: 'segments', label: 'Segments' }, { id: 'companies', label: 'Companies' }, { id: 'attribution', label: 'Attribution' }, { id: 'autopilot', label: 'Autopilot' }, { id: 'campaigns', label: 'Campaigns' }, { id: 'metaobjects', label: 'Metaobjects' }, { id: 'files', label: 'Files' }, { id: 'menus', label: 'Menus' }, { id: 'blog-posts', label: 'Blog posts' }, { id: 'catalogs', label: 'Catalogs' }, { id: 'rollouts', label: 'Rollouts' }, { id: 'reports', label: 'Reports' }, { id: 'live-view', label: 'Live View' }]
+  const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }, { id: 'collections', label: 'Collections' }, { id: 'inventory', label: 'Inventory' }, { id: 'purchase-orders', label: 'Purchase orders' }, { id: 'transfers', label: 'Transfers' }, { id: 'gift-cards', label: 'Gift cards' }, { id: 'segments', label: 'Segments' }, { id: 'attribution', label: 'Attribution' }, { id: 'autopilot', label: 'Autopilot' }, { id: 'campaigns', label: 'Campaigns' }, { id: 'metaobjects', label: 'Metaobjects' }, { id: 'files', label: 'Files' }, { id: 'menus', label: 'Menus' }, { id: 'blog-posts', label: 'Blog posts' }, { id: 'catalogs', label: 'Catalogs' }, { id: 'rollouts', label: 'Rollouts' }, { id: 'reports', label: 'Reports' }, { id: 'live-view', label: 'Live View' }]
   const pageHits = search.trim().length < 2 ? [] : pages.filter(p => p.label.toLowerCase().includes(search.trim().toLowerCase()))
   const item = ({ id, label, icon: Icon }) => (
     <button key={id} className={`nav ${view === id ? 'on' : ''}`} onClick={() => setView(id)}>
@@ -129,7 +129,6 @@ export default function App() {
             </button>
             {customersOpen && <>
               <button className={`sub ${view === 'segments' ? 'on' : ''}`} onClick={() => setView('segments')}>Segments</button>
-              <button className={`sub ${view === 'companies' ? 'on' : ''}`} onClick={() => setView('companies')}>Companies</button>
             </>}
           </div>
         ) : entry.id === 'markets' ? (
@@ -166,7 +165,7 @@ export default function App() {
         {view === 'products' && <Products focus={focus} onOpen={setView} />}
         {PRODUCT_VIEWS.includes(view) && <CatalogSection view={view} focus={focus} onOpen={setView} />}
         {view === 'customers' && <Customers focus={focus} onOpen={setView} />}
-        {view === 'segments' && <Segments onOpen={setView} />}
+        {view === 'segments' && <Segments focus={focus} onOpen={setView} />}
         {view === 'companies' && <Companies focus={focus} onOpen={setView} />}
         {view === 'discounts' && <Discounts focus={focus} onOpen={setView} />}
         {view === 'content' && <Content focus={focus} />}

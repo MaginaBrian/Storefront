@@ -1,7 +1,7 @@
 import json
 import re
 import secrets
-from datetime import date
+from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, request
 
@@ -68,7 +68,25 @@ def create_customer():
     return jsonify(saved[0] if len(saved) == 1 and "customers" not in body else saved), 201
 
 
+SEGMENT_COPY = {
+    "purchased": "Customers who have placed at least 1 order.",
+    "repeat": "Customers who have placed more than 1 order.",
+    "never": "Customers who have not placed any orders.",
+    "subscribers": "Customers who have their email subscription status set to subscribed.",
+    "abandoned": "Customers whose most recent abandoned checkout date is within the previous 30 days.",
+}
+
+
 def customers_for(rule):
+    if rule == "abandoned":
+        cutoff = (date.today() - timedelta(days=30)).isoformat()
+        return query(
+            """SELECT DISTINCT customers.* FROM customers
+               JOIN checkouts ON lower(checkouts.email) = lower(customers.email)
+               WHERE substr(checkouts.created_at, 1, 10) >= ?
+               ORDER BY customers.spent DESC""",
+            (cutoff,),
+        )
     where = {
         "purchased": "orders >= 1",
         "repeat": "orders > 1",
@@ -80,9 +98,23 @@ def customers_for(rule):
     return query(f"SELECT * FROM customers WHERE {where} ORDER BY spent DESC")
 
 
+def segment_view(segment, customers, total):
+    percent = 0 if not total else round(len(customers) * 100 / total, 2)
+    return {
+        "id": segment["id"],
+        "name": segment["name"],
+        "description": SEGMENT_COPY.get(segment["query"], "Customers saved in this segment."),
+        "percent": percent,
+        "last_activity": segment["last_activity"],
+        "created_by": segment["created_by"],
+    }
+
+
 @bp.get("/api/segments")
 def segments():
-    return jsonify(query("SELECT * FROM segments ORDER BY id"))
+    rows = query("SELECT * FROM segments ORDER BY id")
+    total = query("SELECT COUNT(*) AS n FROM customers")[0]["n"]
+    return jsonify([segment_view(row, customers_for(row["query"]), total) for row in rows])
 
 
 @bp.get("/api/segments/<int:segment_id>")
@@ -90,8 +122,31 @@ def segment_detail(segment_id):
     found = query("SELECT * FROM segments WHERE id = ?", (segment_id,))
     if not found:
         return jsonify(error="Segment not found"), 404
-    segment = found[0]
-    return jsonify(segment=segment, customers=customers_for(segment["query"]))
+    total = query("SELECT COUNT(*) AS n FROM customers")[0]["n"]
+    customers = customers_for(found[0]["query"])
+    return jsonify(segment=segment_view(found[0], customers, total), customers=customers, total=total)
+
+
+@bp.post("/api/segments/<int:segment_id>")
+def segment_action(segment_id):
+    found = query("SELECT * FROM segments WHERE id = ?", (segment_id,))
+    if not found:
+        return jsonify(error="Segment not found"), 404
+    current = found[0]
+    action = (request.json or {}).get("action")
+    if action == "duplicate":
+        with connect() as db:
+            cur = db.execute(
+                "INSERT INTO segments (name, query, percent, last_activity, created_by) VALUES (?, ?, 0, ?, 'Piacì')",
+                (f"{current['name']} copy"[:120], current["query"], date.today().isoformat()),
+            )
+            new_id = cur.lastrowid
+        return jsonify(id=new_id), 201
+    if action == "delete":
+        with connect() as db:
+            db.execute("DELETE FROM segments WHERE id = ?", (segment_id,))
+        return jsonify(deleted=True)
+    return jsonify(error="Unknown action"), 400
 
 
 @bp.post("/api/segments")
@@ -105,7 +160,9 @@ def create_segment():
             (name[:120], date.today().isoformat()),
         )
         segment_id = cur.lastrowid
-    return jsonify(query("SELECT * FROM segments WHERE id = ?", (segment_id,))[0]), 201
+    row = query("SELECT * FROM segments WHERE id = ?", (segment_id,))[0]
+    total = query("SELECT COUNT(*) AS n FROM customers")[0]["n"]
+    return jsonify(segment_view(row, customers_for(row["query"]), total)), 201
 
 
 @bp.get("/api/companies")
@@ -593,7 +650,7 @@ def search():
     for row in query("SELECT name FROM customers WHERE name LIKE ? OR email LIKE ? LIMIT 5", (like, like)):
         hits.append({"view": "customers", "label": row["name"], "customer": row["name"]})
     for row in query("SELECT id, name FROM segments WHERE name LIKE ? LIMIT 5", (like,)):
-        hits.append({"view": "customers", "label": row["name"], "segment": row["id"]})
+        hits.append({"view": "segments", "label": row["name"], "segment": row["id"]})
     for row in query("SELECT id, name FROM companies WHERE name LIKE ? LIMIT 5", (like,)):
         hits.append({"view": "companies", "label": row["name"], "company": row["id"]})
     for row in query("SELECT id, name FROM menus WHERE name LIKE ? LIMIT 5", (like,)):
