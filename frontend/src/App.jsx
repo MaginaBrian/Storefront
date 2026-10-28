@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, Globe, Inbox, Moon, Search, Sun, Tag, Users } from 'lucide-react'
+import { BarChart3, Globe, Inbox, Menu, Moon, Search, Sun, Tag, Users } from 'lucide-react'
 import CatalogSection from './catalog/index.jsx'
 import Home from './home/Home.jsx'
 import { allowed, storedStaff, useStaff } from './access.js'
@@ -32,6 +32,7 @@ export default function App() {
   const [focus, setFocus] = useState(initial.focus)
   const [session] = useJson('/api/session')
   const [who, setWho] = useState(false)
+  const [menu, setMenu] = useState(false)
   const stored = storedStaff()
   const permissions = session?.permissions || (stored ? [] : null)
   const can = key => permissions == null || permissions.includes(key)
@@ -80,7 +81,17 @@ export default function App() {
     setFocus({ ...Object.fromEntries(params), tick: Date.now() })
     setSearch('')
     setHits([])
+    setMenu(false)
   }
+  useEffect(() => {
+    document.body.classList.toggle('nav-lock', menu)
+    return () => document.body.classList.remove('nav-lock')
+  }, [menu])
+  useEffect(() => {
+    const close = () => { if (window.innerWidth > 760) setMenu(false) }
+    window.addEventListener('resize', close)
+    return () => window.removeEventListener('resize', close)
+  }, [])
   const pages = [...NAV, ...CHANNELS, SETTINGS, { id: 'drafts', label: 'Drafts' }, { id: 'checkouts', label: 'Abandoned checkouts' }, { id: 'collections', label: 'Collections' }, { id: 'inventory', label: 'Inventory' }, { id: 'purchase-orders', label: 'Purchase orders' }, { id: 'transfers', label: 'Transfers' }, { id: 'gift-cards', label: 'Gift cards' }, { id: 'segments', label: 'Segments' }, { id: 'attribution', label: 'Attribution' }, { id: 'autopilot', label: 'Autopilot' }, { id: 'campaigns', label: 'Campaigns' }, { id: 'metaobjects', label: 'Metaobjects' }, { id: 'files', label: 'Files' }, { id: 'menus', label: 'Menus' }, { id: 'blog-posts', label: 'Blog posts' }, { id: 'catalogs', label: 'Catalogs' }, { id: 'rollouts', label: 'Rollouts' }, { id: 'reports', label: 'Reports' }, { id: 'live-view', label: 'Live View' }]
   const pageHits = search.trim().length < 2 ? [] : pages.filter(p => p.label.toLowerCase().includes(search.trim().toLowerCase()) && (permissions == null || allowed(p.id, permissions)))
   const viewOk = permissions == null || allowed(view, permissions)
@@ -97,7 +108,14 @@ export default function App() {
   const marketsOpen = view === 'markets' || MARKET_VIEWS.includes(view)
   const analyticsOpen = view === 'analytics' || ANALYTICS_VIEWS.includes(view)
   return (
-    <div className="shell">
+    <div className={`shell ${menu ? 'nav-open' : ''}`}>
+      <header className="phone-bar">
+        <button type="button" className="phone-menu" aria-label={menu ? 'Close menu' : 'Open menu'} aria-expanded={menu} onClick={() => setMenu(open => !open)}>
+          <Menu size={20} strokeWidth={1.7} />
+        </button>
+        <button type="button" className="brand" onClick={() => setView('home')}>Piacì</button>
+      </header>
+      {menu && <button type="button" className="nav-shade" aria-label="Close menu" onClick={() => setMenu(false)} />}
       <aside>
         <button type="button" className="brand" onClick={() => setView('home')}>Piacì</button>
         <label className="search"><Search size={15} /><input id="nav-search" placeholder="Search" value={search} onChange={e => setSearch(e.target.value)} /><kbd>Ctrl K</kbd>

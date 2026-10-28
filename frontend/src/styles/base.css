@@ -28,6 +28,7 @@ nav { display: flex; flex-direction: column; gap: 2px; }
 .cta { display: inline-flex; align-items: center; gap: 6px; justify-content: center; background: var(--ink); color: var(--paper);
   padding: 8px 14px; border-radius: 8px; font-weight: 600; }
 .foot { margin-top: auto; }
+.phone-bar, .nav-shade { display: none; }
 
 main { padding: 28px 32px; overflow: auto; min-width: 0; }
 .page-head, .between { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
